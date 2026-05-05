@@ -1,0 +1,31 @@
+follower_platooning:
+  ros__parameters:
+    platooning_mode: "vision"
+
+    target_distance: 0.20
+    min_distance: 0.15
+    max_distance: 0.30
+    emergency_stop_distance: 0.12
+
+    kp_distance: 0.35
+    kp_yaw: 0.80
+
+    max_linear_speed: 0.05
+    max_angular_speed: 0.25
+
+    marker_lost_timeout: 0.5
+    heartbeat_timeout: 1.0
+
+    enable_reverse: false
+
+    target_visible_topic: "/follower/target_visible"
+    target_offset_x_topic: "/follower/target_offset_x"
+    target_distance_topic: "/follower/target_distance"
+
+    follower_enable_topic: "/leader/follower_enable"
+    platoon_mode_topic: "/leader/platoon_mode"
+    heartbeat_topic: "/leader/heartbeat"
+
+    cmd_vel_raw_topic: "/follower/cmd_vel_raw"
+    status_topic: "/follower/status"
+    distance_error_topic: "/follower/distance_error"

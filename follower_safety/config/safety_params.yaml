@@ -1,0 +1,24 @@
+follower_safety:
+  ros__parameters:
+    front_obstacle_distance: 0.12
+    side_obstacle_distance: 0.08
+    front_angle_deg: 25.0
+
+    marker_required: true
+    heartbeat_required: true
+
+    heartbeat_timeout: 1.0
+    cmd_vel_timeout: 0.5
+
+    allow_reverse: false
+
+    max_linear_speed: 0.05
+    max_angular_speed: 0.25
+
+    cmd_vel_raw_topic: "/follower/cmd_vel_raw"
+    target_visible_topic: "/follower/target_visible"
+    heartbeat_topic: "/leader/heartbeat"
+    scan_topic: "/scan"
+
+    cmd_vel_topic: "/cmd_vel"
+    safety_state_topic: "/follower/safety_state"
