@@ -1,5 +1,6 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
+# ROS setup scripts reference optional environment variables, so nounset (-u) is avoided.
 
 REPO_URL="${REPO_URL:-https://github.com/KweonTJ/Turtlebot3_Platooning.git}"
 BRANCH="${BRANCH:-main}"
