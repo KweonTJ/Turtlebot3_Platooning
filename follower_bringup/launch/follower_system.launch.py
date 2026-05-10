@@ -39,6 +39,9 @@ def generate_launch_description():
     camera_frame_id = LaunchConfiguration("camera_frame_id")
     start_rviz = LaunchConfiguration("start_rviz")
     start_joint_state_publisher = LaunchConfiguration("start_joint_state_publisher")
+    start_base_driver = LaunchConfiguration("start_base_driver")
+    usb_port = LaunchConfiguration("usb_port")
+    tb3_param_dir = LaunchConfiguration("tb3_param_dir")
 
     vision_params = PathJoinSubstitution(
         [
@@ -61,6 +64,12 @@ def generate_launch_description():
         get_package_share_directory("follower_bringup"),
         "rviz",
         "platooning_model.rviz",
+    )
+    default_tb3_param = os.path.join(
+        get_package_share_directory("turtlebot3_bringup"),
+        "param",
+        "humble",
+        "waffle_pi.yaml",
     )
 
     platooning_xacro_file = PathJoinSubstitution(
@@ -163,6 +172,18 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_frame_id", default_value="camera_rgb_optical_frame"),
             DeclareLaunchArgument("start_rviz", default_value="false"),
             DeclareLaunchArgument("start_joint_state_publisher", default_value="false"),
+            DeclareLaunchArgument("start_base_driver", default_value="true"),
+            DeclareLaunchArgument("usb_port", default_value="/dev/ttyACM0"),
+            DeclareLaunchArgument("tb3_param_dir", default_value=default_tb3_param),
+            Node(
+                package="turtlebot3_node",
+                executable="turtlebot3_ros",
+                name="turtlebot3_node",
+                output="screen",
+                condition=IfCondition(start_base_driver),
+                parameters=[tb3_param_dir],
+                arguments=["-i", usb_port],
+            ),
             Node(
                 package="robot_state_publisher",
                 executable="robot_state_publisher",
