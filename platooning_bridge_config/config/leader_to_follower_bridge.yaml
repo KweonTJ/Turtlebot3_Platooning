@@ -37,3 +37,10 @@ topics:
       reliability: reliable
       durability: transient_local
       depth: 1
+
+  leader/cmd_vel:
+    type: geometry_msgs/msg/Twist
+    qos:
+      reliability: best_effort
+      durability: volatile
+      depth: 5

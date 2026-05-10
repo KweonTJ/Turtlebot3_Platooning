@@ -60,8 +60,15 @@ public:
 
     marker_lost_timeout_ = declare_parameter<double>("marker_lost_timeout", 0.5);
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
+    leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
+    mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
+    leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
+    leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
+    leader_cmd_reverse_threshold_ = declare_parameter<double>("leader_cmd_reverse_threshold", 0.01);
+    leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
+    leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
 
     const auto target_visible_topic =
       declare_parameter<std::string>("target_visible_topic", "/follower/target_visible");
@@ -76,6 +83,8 @@ public:
       declare_parameter<std::string>("platoon_mode_topic", "/leader/platoon_mode");
     const auto heartbeat_topic =
       declare_parameter<std::string>("heartbeat_topic", "/leader/heartbeat");
+    const auto leader_cmd_vel_topic =
+      declare_parameter<std::string>("leader_cmd_vel_topic", "/leader/cmd_vel");
 
     const auto cmd_vel_raw_topic =
       declare_parameter<std::string>("cmd_vel_raw_topic", "/follower/cmd_vel_raw");
@@ -113,6 +122,9 @@ public:
     heartbeat_sub_ = create_subscription<std_msgs::msg::Bool>(
       heartbeat_topic, heartbeat_qos,
       std::bind(&FollowerPlatooningNode::heartbeat_callback, this, std::placeholders::_1));
+    leader_cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      leader_cmd_vel_topic, rclcpp::QoS(10),
+      std::bind(&FollowerPlatooningNode::leader_cmd_vel_callback, this, std::placeholders::_1));
 
     control_timer_ = create_wall_timer(
       50ms, std::bind(&FollowerPlatooningNode::control_timer_callback, this));
@@ -156,6 +168,13 @@ private:
     last_heartbeat_time_ = now();
   }
 
+  void leader_cmd_vel_callback(const geometry_msgs::msg::Twist::ConstSharedPtr msg)
+  {
+    latest_leader_cmd_ = *msg;
+    have_leader_cmd_ = true;
+    last_leader_cmd_time_ = now();
+  }
+
   void control_timer_callback()
   {
     const auto current_time = now();
@@ -197,6 +216,12 @@ private:
       status = "HEARTBEAT_TIMEOUT";
       return zero_twist();
     }
+
+    geometry_msgs::msg::Twist leader_motion_cmd;
+    if (leader_reverse_turn_command(current_time, leader_motion_cmd, status)) {
+      return leader_motion_cmd;
+    }
+
     if (target_timed_out(current_time) || !target_visible_) {
       status = "TARGET_LOST";
       return zero_twist();
@@ -228,6 +253,52 @@ private:
 
     status = "FOLLOWING";
     return cmd;
+  }
+
+  bool leader_reverse_turn_command(
+    const rclcpp::Time & current_time,
+    geometry_msgs::msg::Twist & cmd,
+    std::string & status) const
+  {
+    if (!mirror_leader_reverse_turn_ || !have_leader_cmd_) {
+      return false;
+    }
+    if ((current_time - last_leader_cmd_time_).seconds() > leader_cmd_timeout_) {
+      return false;
+    }
+
+    const auto leader_linear = latest_leader_cmd_.linear.x;
+    const auto leader_angular = latest_leader_cmd_.angular.z;
+    const auto reversing = leader_linear < -std::abs(leader_cmd_reverse_threshold_);
+    const auto turning =
+      std::abs(leader_angular) > std::abs(leader_cmd_turn_threshold_) &&
+      std::abs(leader_linear) <= std::abs(leader_cmd_turn_linear_deadband_);
+
+    if (!reversing && !turning) {
+      return false;
+    }
+
+    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
+
+    if (reversing) {
+      cmd.linear.x = clamp(
+        leader_linear * leader_cmd_linear_gain_,
+        min_linear_speed,
+        max_linear_speed_);
+      cmd.angular.z = clamp(
+        leader_angular * leader_cmd_angular_gain_,
+        -max_angular_speed_,
+        max_angular_speed_);
+      status = "MIRROR_REVERSE";
+      return true;
+    }
+
+    cmd.angular.z = clamp(
+      leader_angular * leader_cmd_angular_gain_,
+      -max_angular_speed_,
+      max_angular_speed_);
+    status = "MIRROR_TURN";
+    return true;
   }
 
   bool heartbeat_timed_out(const rclcpp::Time & current_time) const
@@ -264,7 +335,14 @@ private:
   double max_angular_speed_;
   double marker_lost_timeout_;
   double heartbeat_timeout_;
+  double leader_cmd_timeout_;
   bool enable_reverse_;
+  bool mirror_leader_reverse_turn_;
+  double leader_cmd_linear_gain_;
+  double leader_cmd_angular_gain_;
+  double leader_cmd_reverse_threshold_;
+  double leader_cmd_turn_threshold_;
+  double leader_cmd_turn_linear_deadband_;
 
   bool target_visible_{false};
   bool have_target_visible_{false};
@@ -276,11 +354,14 @@ private:
   std::string platoon_mode_state_;
   bool have_platoon_mode_{false};
   bool have_heartbeat_{false};
+  bool have_leader_cmd_{false};
+  geometry_msgs::msg::Twist latest_leader_cmd_;
   double last_distance_error_{0.0};
 
   rclcpp::Time last_target_visible_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_heartbeat_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_leader_cmd_time_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr target_visible_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_offset_x_sub_;
@@ -288,6 +369,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr follower_enable_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr platoon_mode_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heartbeat_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr leader_cmd_vel_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_raw_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr distance_error_pub_;

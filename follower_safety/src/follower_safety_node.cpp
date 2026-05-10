@@ -56,6 +56,12 @@ public:
     cmd_vel_timeout_ = declare_parameter<double>("cmd_vel_timeout", 0.5);
 
     allow_reverse_ = declare_parameter<bool>("allow_reverse", false);
+    allow_untracked_reverse_or_turn_ =
+      declare_parameter<bool>("allow_untracked_reverse_or_turn", true);
+    untracked_reverse_threshold_ = declare_parameter<double>("untracked_reverse_threshold", 0.01);
+    untracked_turn_threshold_ = declare_parameter<double>("untracked_turn_threshold", 0.05);
+    untracked_turn_linear_deadband_ =
+      declare_parameter<double>("untracked_turn_linear_deadband", 0.02);
 
     max_linear_speed_ = declare_parameter<double>("max_linear_speed", 0.05);
     max_angular_speed_ = declare_parameter<double>("max_angular_speed", 0.25);
@@ -160,16 +166,16 @@ private:
       state = "FRONT_OBSTACLE";
       return zero_twist();
     }
-    if (marker_required_ && (!have_target_visible_ || !target_visible_)) {
-      state = "TARGET_LOST";
-      return zero_twist();
-    }
     if (heartbeat_required_ && heartbeat_timed_out(current_time)) {
       state = "HEARTBEAT_TIMEOUT";
       return zero_twist();
     }
     if (cmd_timed_out(current_time)) {
       state = "CMD_TIMEOUT";
+      return zero_twist();
+    }
+    if (!marker_gate_allows_command()) {
+      state = "TARGET_LOST";
       return zero_twist();
     }
 
@@ -193,6 +199,22 @@ private:
       state = "SAFE";
     }
     return filtered;
+  }
+
+  bool marker_gate_allows_command() const
+  {
+    if (!marker_required_ || (have_target_visible_ && target_visible_)) {
+      return true;
+    }
+    if (!allow_untracked_reverse_or_turn_) {
+      return false;
+    }
+
+    const auto reversing = latest_cmd_.linear.x < -std::abs(untracked_reverse_threshold_);
+    const auto turning =
+      std::abs(latest_cmd_.angular.z) > std::abs(untracked_turn_threshold_) &&
+      std::abs(latest_cmd_.linear.x) <= std::abs(untracked_turn_linear_deadband_);
+    return reversing || turning;
   }
 
   bool heartbeat_timed_out(const rclcpp::Time & current_time) const
@@ -219,6 +241,10 @@ private:
   double heartbeat_timeout_;
   double cmd_vel_timeout_;
   bool allow_reverse_;
+  bool allow_untracked_reverse_or_turn_;
+  double untracked_reverse_threshold_;
+  double untracked_turn_threshold_;
+  double untracked_turn_linear_deadband_;
   double max_linear_speed_;
   double max_angular_speed_;
 

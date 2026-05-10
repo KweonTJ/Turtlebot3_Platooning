@@ -10,10 +10,14 @@ follower_safety:
     heartbeat_timeout: 1.0
     cmd_vel_timeout: 0.5
 
-    allow_reverse: false
+    allow_reverse: true
+    allow_untracked_reverse_or_turn: true
+    untracked_reverse_threshold: 0.01
+    untracked_turn_threshold: 0.05
+    untracked_turn_linear_deadband: 0.02
 
-    max_linear_speed: 0.05
-    max_angular_speed: 0.25
+    max_linear_speed: 0.10
+    max_angular_speed: 0.45
 
     cmd_vel_raw_topic: "/follower/cmd_vel_raw"
     target_visible_topic: "/follower/target_visible"
