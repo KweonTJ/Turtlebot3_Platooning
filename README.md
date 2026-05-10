@@ -214,6 +214,22 @@ ros2 launch follower_bringup follower_system.launch.py start_rviz:=false
 
 리더/호스트와 함께 실행할 때는 네트워크가 같은지, `ROS_LOCALHOST_ONLY=0`인지, 각 장치의 domain ID가 현재 계획과 일치하는지 먼저 확인한다.
 
+## GitHub 자동 업데이트
+
+팔로워 로봇에는 워크스페이스 루트에 `update_from_github.sh`를 두고 실행한다.
+
+```bash
+cd ~/Turtlebot3_Platooning
+./update_from_github.sh
+```
+
+첫 실행 시 `src`가 Git 리포가 아니면 기존 `src`를 `src.backup.YYYYMMDD_HHMMSS`로 백업하고, GitHub main 브랜치를 새 `src`로 clone한다. 이후 실행부터는 `origin/main`을 fetch/reset/clean 한 뒤 빌드한다.
+
+```text
+GitHub repo: https://github.com/KweonTJ/Turtlebot3_Platooning.git
+기본 branch: main
+```
+
 ## 문제 확인
 
 ### odometry가 들어오지 않을 때
