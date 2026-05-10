@@ -162,7 +162,7 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_prefix", default_value=""),
             DeclareLaunchArgument("camera_frame_id", default_value="camera_rgb_optical_frame"),
             DeclareLaunchArgument("start_rviz", default_value="false"),
-            DeclareLaunchArgument("start_joint_state_publisher", default_value="true"),
+            DeclareLaunchArgument("start_joint_state_publisher", default_value="false"),
             Node(
                 package="robot_state_publisher",
                 executable="robot_state_publisher",
