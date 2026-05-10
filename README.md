@@ -105,14 +105,13 @@ source ~/Desktop/Turtlebot3_Platooning/install/setup.bash
 ros2 launch follower_bringup follower_system.launch.py start_rviz:=false
 ```
 
-현재 기본 실행은 `use_camera:=false`, `start_vision:=false`이다. ArUco 없이 odometry 기반 제어만 실행한다.
+현재 기본 실행은 `use_camera:=true`, `start_vision:=false`이다. 카메라 토픽은 띄우되, ArUco 없이 odometry 기반 제어만 실행한다.
 
-선택적으로 카메라/vision 노드를 다시 켜야 할 때는 다음처럼 실행한다.
+카메라 장치 번호가 `/dev/video0`이 아니면 다음처럼 지정한다.
 
 ```bash
 ros2 launch follower_bringup follower_system.launch.py \
   use_camera:=true \
-  start_vision:=true \
   video_device:=/dev/video2 \
   start_rviz:=false
 ```

@@ -162,7 +162,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("use_camera", default_value="false"),
+            DeclareLaunchArgument("use_camera", default_value="true"),
             DeclareLaunchArgument("start_vision", default_value="false"),
             DeclareLaunchArgument("video_device", default_value="/dev/video0"),
             DeclareLaunchArgument("use_debug_image", default_value="true"),
