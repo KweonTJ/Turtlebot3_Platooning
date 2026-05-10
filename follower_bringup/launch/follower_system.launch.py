@@ -181,7 +181,7 @@ def generate_launch_description():
                 name="turtlebot3_node",
                 output="screen",
                 condition=IfCondition(start_base_driver),
-                parameters=[tb3_param_dir],
+                parameters=[tb3_param_dir, {"namespace": ""}],
                 arguments=["-i", usb_port],
             ),
             Node(
