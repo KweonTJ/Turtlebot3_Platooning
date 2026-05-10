@@ -2,12 +2,12 @@
 
 이 워크스페이스는 플래투닝 시스템의 **팔로워 로봇**에서 실행하는 패키지 모음이다. 현재 기본 구성은 ArUco 카메라 추적을 제외하고, 리더 odometry와 팔로워 odometry를 이용해 목표 차간 거리를 유지한다. `follower_platooning`이 원시 속도 명령을 만들고, `follower_safety`가 안전 조건을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
 
-현재 도메인 ID는 실험용 임시값이다.
+현재 도메인 ID는 SSH 설정에 맞춘 실제 로봇 기준값이다.
 
 | 구분 | ROS Domain ID | 역할 |
 | --- | ---: | --- |
-| 리더 로봇 | `10` | 물체 접근, 파지, 적재, 리더 상태 발행 |
-| 팔로워 로봇 | `20` | odometry 기반 거리 제어, 안전 필터, 최종 주행 |
+| 리더 로봇 | `25` | 물체 접근, 파지, 적재, 리더 상태 발행 |
+| 팔로워 로봇 | `73` | odometry 기반 거리 제어, 안전 필터, 최종 주행 |
 | 호스트 PC | `16` | 태블릿 모니터, 상태 브릿지, 실험 관찰 |
 
 ## 패키지 구성
@@ -18,7 +18,7 @@
 | `follower_vision` | 선택 기능. 현재 기본 실행에서는 사용하지 않음 |
 | `follower_platooning` | odometry 기반 목표 거리 유지 제어 및 `/follower/cmd_vel_raw` 발행 |
 | `follower_safety` | 장애물, heartbeat, 속도 제한을 확인하고 최종 `/cmd_vel` 발행 |
-| `platooning_bridge_config` | 리더 도메인 `10`의 상태 토픽을 팔로워 도메인 `20`으로 브릿지 |
+| `platooning_bridge_config` | 리더 도메인 `25`의 상태 토픽을 팔로워 도메인 `73`으로 브릿지 |
 
 기존 TurtleBot3, DynamixelSDK, manipulation, simulation 패키지는 upstream 의존성으로 유지한다. 플래투닝 전용 수정은 위 신규 패키지들 안에서 관리한다.
 
@@ -93,10 +93,10 @@ sudo apt install ros-humble-domain-bridge
 
 ### 1. 팔로워 로봇 전체 실행
 
-팔로워 로봇에서는 도메인 `20`으로 실행한다.
+팔로워 로봇에서는 도메인 `73`으로 실행한다.
 
 ```bash
-export ROS_DOMAIN_ID=20
+export ROS_DOMAIN_ID=73
 export ROS_LOCALHOST_ONLY=0
 
 source /opt/ros/humble/setup.bash
@@ -122,7 +122,7 @@ ros2 launch follower_bringup follower_system.launch.py \
 팔로워 로봇 또는 같은 도메인의 PC에서 RViz를 같이 띄운다.
 
 ```bash
-export ROS_DOMAIN_ID=20
+export ROS_DOMAIN_ID=73
 source /opt/ros/humble/setup.bash
 source ~/Desktop/Turtlebot3_Platooning/install/setup.bash
 
@@ -133,7 +133,7 @@ RViz fixed frame은 기본적으로 `base_footprint` 기준 모델 확인용이�
 
 ### 3. 리더 토픽 브릿지 실행
 
-리더 도메인 `10`의 상태를 팔로워 도메인 `20`으로 넘긴다. 브릿지는 네트워크상에서 두 도메인을 모두 볼 수 있는 PC에서 실행한다.
+리더 도메인 `25`의 상태를 팔로워 도메인 `73`으로 넘긴다. 브릿지는 네트워크상에서 두 도메인을 모두 볼 수 있는 PC에서 실행한다.
 
 ```bash
 export ROS_LOCALHOST_ONLY=0
@@ -148,10 +148,10 @@ ros2 launch platooning_bridge_config bridge.launch.py
 
 ## 정상 동작 확인
 
-팔로워 도메인 `20`에서 확인한다.
+팔로워 도메인 `73`에서 확인한다.
 
 ```bash
-export ROS_DOMAIN_ID=20
+export ROS_DOMAIN_ID=73
 source /opt/ros/humble/setup.bash
 source ~/Desktop/Turtlebot3_Platooning/install/setup.bash
 
@@ -174,7 +174,7 @@ ros2 topic echo /leader/odom --once
 ## 운용 흐름
 
 1. 리더 로봇이 `/leader/heartbeat`, `/leader/platoon_mode`, `/leader/follower_enable`, `/leader/cmd_vel`을 발행한다.
-2. 브릿지가 리더 도메인 `10`에서 팔로워 도메인 `20`으로 상태 토픽을 전달한다.
+2. 브릿지가 리더 도메인 `25`에서 팔로워 도메인 `73`으로 상태 토픽을 전달한다.
 3. 팔로워 로봇은 `/leader/odom`과 자신의 `/odom`을 비교해 리더와의 상대 거리를 계산한다.
 4. `follower_platooning`이 목표 거리 `0.45 m`를 기준으로 `/follower/cmd_vel_raw`를 계산한다.
 5. `follower_safety`가 heartbeat, 장애물, 속도 제한을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
@@ -207,7 +207,7 @@ rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 source install/setup.bash
 
-export ROS_DOMAIN_ID=20
+export ROS_DOMAIN_ID=73
 export ROS_LOCALHOST_ONLY=0
 ros2 launch follower_bringup follower_system.launch.py start_rviz:=false
 ```
@@ -243,7 +243,7 @@ ros2 topic echo /leader/odom --once
 
 - 팔로워 로봇의 기본 odometry가 `/odom`으로 발행되는지 확인
 - 리더 워크스페이스가 `/leader/odom`을 발행하는지 확인
-- `platooning_bridge_config`가 리더 도메인 `10`에서 팔로워 도메인 `20`으로 `/leader/odom`을 브릿지하는지 확인
+- `platooning_bridge_config`가 리더 도메인 `25`에서 팔로워 도메인 `73`으로 `/leader/odom`을 브릿지하는지 확인
 
 ### 팔로워가 움직이지 않을 때
 
@@ -269,4 +269,4 @@ ros2 topic echo /follower/safety_state --once
 - 이 워크스페이스는 팔로워 로봇 전용이다.
 - 리더 로봇 작업 데모와 물체 파지/적재 로직은 리더 워크스페이스에서 관리한다.
 - 태블릿 모니터와 호스트 브릿지는 호스트 워크스페이스에서 관리한다.
-- 현재 domain ID는 임시값이며 실제 운용 환경에 맞춰 수정할 예정이다.
+- 현재 domain ID는 실제 로봇 기준으로 리더 25, 팔로워 73, 호스트 16을 사용한다.
