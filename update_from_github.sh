@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/KweonTJ/Turtlebot3_Platooning.git}"
 BRANCH="${BRANCH:-main}"
+PUSH_DISABLED_URL="${PUSH_DISABLED_URL:-DISABLED_ON_TURTLEBOT_PULL_ONLY}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ "$(basename "${SCRIPT_DIR}")" = "src" ]; then
@@ -26,6 +27,7 @@ if [ ! -d "${SRC_DIR}/.git" ]; then
 
   echo "Cloning ${REPO_URL} into ${SRC_DIR}"
   git clone --branch "${BRANCH}" "${REPO_URL}" "${SRC_DIR}"
+  cd "${SRC_DIR}"
 else
   cd "${SRC_DIR}"
   git -c http.version=HTTP/1.1 -c protocol.version=1 \
@@ -34,6 +36,9 @@ else
   git reset --hard "origin/${BRANCH}"
   git clean -fd
 fi
+
+git remote set-url --push origin "${PUSH_DISABLED_URL}"
+echo "origin push URL disabled; this TurtleBot workspace is pull-only."
 
 cd "${WORKSPACE_DIR}"
 

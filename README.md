@@ -225,6 +225,8 @@ cd ~/Turtlebot3_Platooning
 
 첫 실행 시 `src`가 Git 리포가 아니면 기존 `src`를 `src.backup.YYYYMMDD_HHMMSS`로 백업하고, GitHub main 브랜치를 새 `src`로 clone한다. 이후 실행부터는 `origin/main`을 fetch/reset/clean 한 뒤 빌드한다.
 
+이 스크립트는 리더 로봇과 같은 방식으로 **받기 전용**이다. 터틀봇 내부에서 수정한 파일은 GitHub로 업로드하지 않고, 다음 실행 때 `origin/main` 기준으로 덮어쓴다. 또한 `origin`의 push URL을 비활성화해서 로봇에서 실수로 push하지 못하게 한다.
+
 ```text
 GitHub repo: https://github.com/KweonTJ/Turtlebot3_Platooning.git
 기본 branch: main
