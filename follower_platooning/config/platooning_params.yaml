@@ -25,6 +25,9 @@ follower_platooning:
     leader_cmd_reverse_threshold: 0.01
     leader_cmd_turn_threshold: 0.05
     leader_cmd_turn_linear_deadband: 0.02
+    use_initial_odom_offset: true
+    initial_leader_offset_x: 0.45
+    initial_leader_offset_y: 0.0
 
     target_visible_topic: "/follower/target_visible"
     target_offset_x_topic: "/follower/target_offset_x"

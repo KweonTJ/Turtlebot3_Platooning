@@ -92,6 +92,9 @@ public:
     leader_cmd_reverse_threshold_ = declare_parameter<double>("leader_cmd_reverse_threshold", 0.01);
     leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
     leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
+    use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
+    initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
 
     const auto target_visible_topic =
       declare_parameter<std::string>("target_visible_topic", "/follower/target_visible");
@@ -320,8 +323,18 @@ private:
       return zero_twist();
     }
 
-    const auto dx = leader_x_ - follower_x_;
-    const auto dy = leader_y_ - follower_y_;
+    if (use_initial_odom_offset_ && !odom_offset_initialized_) {
+      initialize_odom_offset();
+    }
+
+    double dx = leader_x_ - follower_x_;
+    double dy = leader_y_ - follower_y_;
+    if (use_initial_odom_offset_) {
+      dx = initial_leader_offset_world_x_ +
+        (leader_x_ - leader_origin_x_) - (follower_x_ - follower_origin_x_);
+      dy = initial_leader_offset_world_y_ +
+        (leader_y_ - leader_origin_y_) - (follower_y_ - follower_origin_y_);
+    }
     const auto measured_distance = std::hypot(dx, dy);
     if (!std::isfinite(measured_distance) || measured_distance <= 0.0) {
       status = "INVALID_ODOM_DISTANCE";
@@ -411,6 +424,27 @@ private:
     return true;
   }
 
+  void initialize_odom_offset()
+  {
+    leader_origin_x_ = leader_x_;
+    leader_origin_y_ = leader_y_;
+    follower_origin_x_ = follower_x_;
+    follower_origin_y_ = follower_y_;
+
+    const auto cos_yaw = std::cos(follower_yaw_);
+    const auto sin_yaw = std::sin(follower_yaw_);
+    initial_leader_offset_world_x_ =
+      cos_yaw * initial_leader_offset_x_ - sin_yaw * initial_leader_offset_y_;
+    initial_leader_offset_world_y_ =
+      sin_yaw * initial_leader_offset_x_ + cos_yaw * initial_leader_offset_y_;
+
+    odom_offset_initialized_ = true;
+    RCLCPP_INFO(
+      get_logger(),
+      "Initial odom offset enabled: leader starts at follower-frame offset x=%.3f y=%.3f m",
+      initial_leader_offset_x_, initial_leader_offset_y_);
+  }
+
   bool heartbeat_timed_out(const rclcpp::Time & current_time) const
   {
     if (!have_heartbeat_) {
@@ -471,6 +505,9 @@ private:
   double leader_cmd_reverse_threshold_;
   double leader_cmd_turn_threshold_;
   double leader_cmd_turn_linear_deadband_;
+  bool use_initial_odom_offset_;
+  double initial_leader_offset_x_;
+  double initial_leader_offset_y_;
 
   bool target_visible_{false};
   bool have_target_visible_{false};
@@ -492,6 +529,13 @@ private:
   double follower_y_{0.0};
   double follower_yaw_{0.0};
   double last_distance_error_{0.0};
+  bool odom_offset_initialized_{false};
+  double leader_origin_x_{0.0};
+  double leader_origin_y_{0.0};
+  double follower_origin_x_{0.0};
+  double follower_origin_y_{0.0};
+  double initial_leader_offset_world_x_{0.0};
+  double initial_leader_offset_world_y_{0.0};
 
   rclcpp::Time last_target_visible_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
