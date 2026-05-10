@@ -126,6 +126,8 @@ public:
       rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
     const auto heartbeat_qos =
       rclcpp::QoS(rclcpp::KeepLast(3)).best_effort().durability_volatile();
+    const auto motion_qos =
+      rclcpp::QoS(rclcpp::KeepLast(5)).best_effort().durability_volatile();
 
     follower_enable_sub_ = create_subscription<std_msgs::msg::Bool>(
       follower_enable_topic, leader_state_qos,
@@ -137,13 +139,13 @@ public:
       heartbeat_topic, heartbeat_qos,
       std::bind(&FollowerPlatooningNode::heartbeat_callback, this, std::placeholders::_1));
     leader_cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
-      leader_cmd_vel_topic, rclcpp::QoS(10),
+      leader_cmd_vel_topic, motion_qos,
       std::bind(&FollowerPlatooningNode::leader_cmd_vel_callback, this, std::placeholders::_1));
     leader_odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-      leader_odom_topic, rclcpp::QoS(10),
+      leader_odom_topic, motion_qos,
       std::bind(&FollowerPlatooningNode::leader_odom_callback, this, std::placeholders::_1));
     follower_odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-      follower_odom_topic, rclcpp::QoS(10),
+      follower_odom_topic, motion_qos,
       std::bind(&FollowerPlatooningNode::follower_odom_callback, this, std::placeholders::_1));
 
     control_timer_ = create_wall_timer(
