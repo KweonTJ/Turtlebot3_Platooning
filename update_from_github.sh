@@ -19,11 +19,18 @@ source /opt/ros/humble/setup.bash
 
 mkdir -p "${WORKSPACE_DIR}"
 
+for backup_dir in "${WORKSPACE_DIR}"/src.backup*; do
+  if [ -d "${backup_dir}" ]; then
+    touch "${backup_dir}/COLCON_IGNORE"
+  fi
+done
+
 if [ ! -d "${SRC_DIR}/.git" ]; then
   if [ -d "${SRC_DIR}" ] && [ "$(find "${SRC_DIR}" -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]; then
     BACKUP_DIR="${WORKSPACE_DIR}/src.backup.$(date +%Y%m%d_%H%M%S)"
     echo "Existing non-git src found. Moving it to ${BACKUP_DIR}"
     mv "${SRC_DIR}" "${BACKUP_DIR}"
+    touch "${BACKUP_DIR}/COLCON_IGNORE"
   fi
 
   echo "Cloning ${REPO_URL} into ${SRC_DIR}"
