@@ -54,6 +54,13 @@ colcon build --symlink-install \
   --allow-overriding dynamixel_sdk \
   --packages-skip \
     follower_vision \
+    turtlebot3_manipulation \
+    turtlebot3_manipulation_bringup \
+    turtlebot3_manipulation_cartographer \
+    turtlebot3_manipulation_hardware \
+    turtlebot3_manipulation_moveit_config \
+    turtlebot3_manipulation_navigation2 \
+    turtlebot3_manipulation_teleop \
     turtlebot3_gazebo \
     turtlebot3_manipulation_gazebo \
     turtlebot3_simulations
