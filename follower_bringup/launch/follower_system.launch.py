@@ -178,7 +178,6 @@ def generate_launch_description():
             Node(
                 package="turtlebot3_node",
                 executable="turtlebot3_ros",
-                name="turtlebot3_node",
                 output="screen",
                 condition=IfCondition(start_base_driver),
                 parameters=[tb3_param_dir, {"namespace": ""}],
