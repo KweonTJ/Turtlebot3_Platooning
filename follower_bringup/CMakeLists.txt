@@ -9,7 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
-install(DIRECTORY config launch rviz urdf
+install(DIRECTORY launch rviz urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
