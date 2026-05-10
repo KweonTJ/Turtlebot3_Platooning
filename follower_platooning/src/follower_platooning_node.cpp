@@ -18,7 +18,9 @@
 #include <memory>
 #include <string>
 
+#include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float32.hpp"
@@ -36,6 +38,13 @@ double clamp(double value, double min_value, double max_value)
 geometry_msgs::msg::Twist zero_twist()
 {
   return geometry_msgs::msg::Twist();
+}
+
+double yaw_from_quaternion(const geometry_msgs::msg::Quaternion & q)
+{
+  const auto siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+  const auto cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+  return std::atan2(siny_cosp, cosy_cosp);
 }
 }  // namespace
 
@@ -59,6 +68,7 @@ public:
     max_angular_speed_ = declare_parameter<double>("max_angular_speed", 0.25);
 
     marker_lost_timeout_ = declare_parameter<double>("marker_lost_timeout", 0.5);
+    odom_timeout_ = declare_parameter<double>("odom_timeout", 0.5);
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
@@ -85,6 +95,10 @@ public:
       declare_parameter<std::string>("heartbeat_topic", "/leader/heartbeat");
     const auto leader_cmd_vel_topic =
       declare_parameter<std::string>("leader_cmd_vel_topic", "/leader/cmd_vel");
+    const auto leader_odom_topic =
+      declare_parameter<std::string>("leader_odom_topic", "/leader/odom");
+    const auto follower_odom_topic =
+      declare_parameter<std::string>("follower_odom_topic", "/odom");
 
     const auto cmd_vel_raw_topic =
       declare_parameter<std::string>("cmd_vel_raw_topic", "/follower/cmd_vel_raw");
@@ -125,6 +139,12 @@ public:
     leader_cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       leader_cmd_vel_topic, rclcpp::QoS(10),
       std::bind(&FollowerPlatooningNode::leader_cmd_vel_callback, this, std::placeholders::_1));
+    leader_odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
+      leader_odom_topic, rclcpp::QoS(10),
+      std::bind(&FollowerPlatooningNode::leader_odom_callback, this, std::placeholders::_1));
+    follower_odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
+      follower_odom_topic, rclcpp::QoS(10),
+      std::bind(&FollowerPlatooningNode::follower_odom_callback, this, std::placeholders::_1));
 
     control_timer_ = create_wall_timer(
       50ms, std::bind(&FollowerPlatooningNode::control_timer_callback, this));
@@ -175,6 +195,23 @@ private:
     last_leader_cmd_time_ = now();
   }
 
+  void leader_odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
+  {
+    leader_x_ = msg->pose.pose.position.x;
+    leader_y_ = msg->pose.pose.position.y;
+    have_leader_odom_ = true;
+    last_leader_odom_time_ = now();
+  }
+
+  void follower_odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
+  {
+    follower_x_ = msg->pose.pose.position.x;
+    follower_y_ = msg->pose.pose.position.y;
+    follower_yaw_ = yaw_from_quaternion(msg->pose.pose.orientation);
+    have_follower_odom_ = true;
+    last_follower_odom_time_ = now();
+  }
+
   void control_timer_callback()
   {
     const auto current_time = now();
@@ -196,10 +233,6 @@ private:
   {
     last_distance_error_ = 0.0;
 
-    if (platooning_mode_ != "vision") {
-      status = "WAITING_ENABLE";
-      return zero_twist();
-    }
     if (!have_follower_enable_) {
       status = "WAITING_ENABLE";
       return zero_twist();
@@ -220,6 +253,14 @@ private:
     geometry_msgs::msg::Twist leader_motion_cmd;
     if (leader_reverse_turn_command(current_time, leader_motion_cmd, status)) {
       return leader_motion_cmd;
+    }
+
+    if (platooning_mode_ == "odom") {
+      return compute_odom_command(current_time, status);
+    }
+    if (platooning_mode_ != "vision") {
+      status = "UNSUPPORTED_MODE";
+      return zero_twist();
     }
 
     if (target_timed_out(current_time) || !target_visible_) {
@@ -252,6 +293,51 @@ private:
     cmd.angular.z = clamp(-kp_yaw_ * target_offset_x_, -max_angular_speed_, max_angular_speed_);
 
     status = "FOLLOWING";
+    return cmd;
+  }
+
+  geometry_msgs::msg::Twist compute_odom_command(
+    const rclcpp::Time & current_time,
+    std::string & status)
+  {
+    if (odom_timed_out(current_time)) {
+      status = "ODOM_TIMEOUT";
+      return zero_twist();
+    }
+
+    const auto dx = leader_x_ - follower_x_;
+    const auto dy = leader_y_ - follower_y_;
+    const auto measured_distance = std::hypot(dx, dy);
+    if (!std::isfinite(measured_distance) || measured_distance <= 0.0) {
+      status = "INVALID_ODOM_DISTANCE";
+      return zero_twist();
+    }
+
+    last_distance_error_ = measured_distance - target_distance_;
+    if (measured_distance <= emergency_stop_distance_ || measured_distance <= min_distance_) {
+      status = "TOO_CLOSE_STOP";
+      return zero_twist();
+    }
+
+    geometry_msgs::msg::Twist cmd;
+    auto linear_x = kp_distance_ * last_distance_error_;
+    if (
+      have_leader_cmd_ &&
+      (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_)
+    {
+      linear_x += latest_leader_cmd_.linear.x * leader_cmd_linear_gain_;
+      cmd.angular.z += latest_leader_cmd_.angular.z * leader_cmd_angular_gain_;
+    }
+
+    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
+    cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
+
+    const auto lateral_error =
+      -std::sin(follower_yaw_) * dx + std::cos(follower_yaw_) * dy;
+    cmd.angular.z += kp_yaw_ * lateral_error;
+    cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed_, max_angular_speed_);
+
+    status = "ODOM_FOLLOWING";
     return cmd;
   }
 
@@ -319,6 +405,16 @@ private:
     return visible_age > marker_lost_timeout_ || distance_age > marker_lost_timeout_;
   }
 
+  bool odom_timed_out(const rclcpp::Time & current_time) const
+  {
+    if (!have_leader_odom_ || !have_follower_odom_) {
+      return true;
+    }
+    const auto leader_age = (current_time - last_leader_odom_time_).seconds();
+    const auto follower_age = (current_time - last_follower_odom_time_).seconds();
+    return leader_age > odom_timeout_ || follower_age > odom_timeout_;
+  }
+
   bool valid_distance() const
   {
     return std::isfinite(measured_distance_) && measured_distance_ > 0.0;
@@ -334,6 +430,7 @@ private:
   double max_linear_speed_;
   double max_angular_speed_;
   double marker_lost_timeout_;
+  double odom_timeout_;
   double heartbeat_timeout_;
   double leader_cmd_timeout_;
   bool enable_reverse_;
@@ -355,13 +452,22 @@ private:
   bool have_platoon_mode_{false};
   bool have_heartbeat_{false};
   bool have_leader_cmd_{false};
+  bool have_leader_odom_{false};
+  bool have_follower_odom_{false};
   geometry_msgs::msg::Twist latest_leader_cmd_;
+  double leader_x_{0.0};
+  double leader_y_{0.0};
+  double follower_x_{0.0};
+  double follower_y_{0.0};
+  double follower_yaw_{0.0};
   double last_distance_error_{0.0};
 
   rclcpp::Time last_target_visible_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_heartbeat_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_leader_cmd_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_leader_odom_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_follower_odom_time_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr target_visible_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_offset_x_sub_;
@@ -370,6 +476,8 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr platoon_mode_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heartbeat_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr leader_cmd_vel_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr leader_odom_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr follower_odom_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_raw_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr distance_error_pub_;

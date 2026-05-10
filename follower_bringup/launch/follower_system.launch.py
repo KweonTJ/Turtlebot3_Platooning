@@ -30,6 +30,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     use_camera = LaunchConfiguration("use_camera")
+    start_vision = LaunchConfiguration("start_vision")
     video_device = LaunchConfiguration("video_device")
     use_debug_image = LaunchConfiguration("use_debug_image")
     publish_robot_description = LaunchConfiguration("publish_robot_description")
@@ -39,10 +40,12 @@ def generate_launch_description():
     start_rviz = LaunchConfiguration("start_rviz")
     start_joint_state_publisher = LaunchConfiguration("start_joint_state_publisher")
 
-    vision_params = os.path.join(
-        get_package_share_directory("follower_vision"),
-        "config",
-        "vision_params.yaml",
+    vision_params = PathJoinSubstitution(
+        [
+            FindPackageShare("follower_vision"),
+            "config",
+            "vision_params.yaml",
+        ]
     )
     platooning_params = os.path.join(
         get_package_share_directory("follower_platooning"),
@@ -150,7 +153,8 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("use_camera", default_value="true"),
+            DeclareLaunchArgument("use_camera", default_value="false"),
+            DeclareLaunchArgument("start_vision", default_value="false"),
             DeclareLaunchArgument("video_device", default_value="/dev/video0"),
             DeclareLaunchArgument("use_debug_image", default_value="true"),
             DeclareLaunchArgument("publish_robot_description", default_value="true"),
@@ -213,6 +217,7 @@ def generate_launch_description():
                 executable="follower_vision_node",
                 name="follower_vision",
                 output="screen",
+                condition=IfCondition(start_vision),
                 parameters=[
                     vision_params,
                     {"publish_debug_image": use_debug_image},

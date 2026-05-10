@@ -44,3 +44,10 @@ topics:
       reliability: best_effort
       durability: volatile
       depth: 5
+
+  leader/odom:
+    type: nav_msgs/msg/Odometry
+    qos:
+      reliability: best_effort
+      durability: volatile
+      depth: 5

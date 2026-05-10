@@ -3,7 +3,7 @@
 <package format="3">
   <name>follower_platooning</name>
   <version>0.0.0</version>
-  <description>Vision target controller that publishes raw follower velocity commands.</description>
+  <description>Follower platooning controller that publishes raw follower velocity commands.</description>
   <maintainer email="kweontj0701@naver.com">ktj</maintainer>
   <license>Apache-2.0</license>
 

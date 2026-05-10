@@ -4,7 +4,7 @@ follower_safety:
     side_obstacle_distance: 0.08
     front_angle_deg: 25.0
 
-    marker_required: true
+    marker_required: false
     heartbeat_required: true
 
     heartbeat_timeout: 1.0
