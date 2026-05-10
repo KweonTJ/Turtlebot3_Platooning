@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #include "geometry_msgs/msg/quaternion.hpp"
@@ -45,6 +46,18 @@ double yaw_from_quaternion(const geometry_msgs::msg::Quaternion & q)
   const auto siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
   const auto cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
   return std::atan2(siny_cosp, cosy_cosp);
+}
+
+double normalize_angle(double angle)
+{
+  constexpr auto pi = 3.14159265358979323846;
+  while (angle > pi) {
+    angle -= 2.0 * pi;
+  }
+  while (angle < -pi) {
+    angle += 2.0 * pi;
+  }
+  return angle;
 }
 }  // namespace
 
@@ -243,7 +256,7 @@ private:
       status = "DISABLED";
       return zero_twist();
     }
-    if (!have_platoon_mode_ || platoon_mode_state_ != "FOLLOW") {
+    if (!have_platoon_mode_ || !platoon_mode_allows_distance_control()) {
       status = "WAITING_ENABLE";
       return zero_twist();
     }
@@ -252,17 +265,17 @@ private:
       return zero_twist();
     }
 
-    geometry_msgs::msg::Twist leader_motion_cmd;
-    if (leader_reverse_turn_command(current_time, leader_motion_cmd, status)) {
-      return leader_motion_cmd;
-    }
-
     if (platooning_mode_ == "odom") {
       return compute_odom_command(current_time, status);
     }
     if (platooning_mode_ != "vision") {
       status = "UNSUPPORTED_MODE";
       return zero_twist();
+    }
+
+    geometry_msgs::msg::Twist leader_motion_cmd;
+    if (leader_reverse_turn_command(current_time, leader_motion_cmd, status)) {
+      return leader_motion_cmd;
     }
 
     if (target_timed_out(current_time) || !target_visible_) {
@@ -280,7 +293,7 @@ private:
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
-    if (measured_distance_ <= min_distance_) {
+    if (!enable_reverse_ && measured_distance_ <= min_distance_) {
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
@@ -316,7 +329,11 @@ private:
     }
 
     last_distance_error_ = measured_distance - target_distance_;
-    if (measured_distance <= emergency_stop_distance_ || measured_distance <= min_distance_) {
+    if (measured_distance <= emergency_stop_distance_) {
+      status = "TOO_CLOSE_STOP";
+      return zero_twist();
+    }
+    if (!enable_reverse_ && measured_distance <= min_distance_) {
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
@@ -324,6 +341,7 @@ private:
     geometry_msgs::msg::Twist cmd;
     auto linear_x = kp_distance_ * last_distance_error_;
     if (
+      platoon_mode_state_ == "FOLLOW" &&
       have_leader_cmd_ &&
       (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_)
     {
@@ -334,12 +352,16 @@ private:
     const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
-    const auto lateral_error =
-      -std::sin(follower_yaw_) * dx + std::cos(follower_yaw_) * dy;
-    cmd.angular.z += kp_yaw_ * lateral_error;
+    const auto bearing_to_leader = std::atan2(dy, dx);
+    const auto heading_error = normalize_angle(bearing_to_leader - follower_yaw_);
+    cmd.angular.z += kp_yaw_ * heading_error;
     cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed_, max_angular_speed_);
 
-    status = "ODOM_FOLLOWING";
+    std::ostringstream status_stream;
+    status_stream << "ODOM_FOLLOWING mode=" << platoon_mode_state_
+                  << " distance=" << measured_distance
+                  << " error=" << last_distance_error_;
+    status = status_stream.str();
     return cmd;
   }
 
@@ -395,6 +417,13 @@ private:
       return true;
     }
     return (current_time - last_heartbeat_time_).seconds() > heartbeat_timeout_;
+  }
+
+  bool platoon_mode_allows_distance_control() const
+  {
+    return platoon_mode_state_ == "FOLLOW" ||
+      platoon_mode_state_ == "STANDBY" ||
+      platoon_mode_state_ == "HANDOFF";
   }
 
   bool target_timed_out(const rclcpp::Time & current_time) const
