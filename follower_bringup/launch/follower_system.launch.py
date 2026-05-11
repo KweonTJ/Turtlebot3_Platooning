@@ -245,6 +245,13 @@ def generate_launch_description():
             ),
             Node(
                 package="follower_platooning",
+                executable="leader_odom_aligner_node",
+                name="leader_odom_aligner",
+                output="screen",
+                parameters=[platooning_params],
+            ),
+            Node(
+                package="follower_platooning",
                 executable="follower_platooning_node",
                 name="follower_platooning",
                 output="screen",

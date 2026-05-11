@@ -86,6 +86,7 @@ public:
     leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
+    allow_distance_reverse_ = declare_parameter<bool>("allow_distance_reverse", false);
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
@@ -93,7 +94,7 @@ public:
     leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
     leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
-    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.47);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
 
     const auto target_visible_topic =
@@ -128,6 +129,8 @@ public:
     status_pub_ = create_publisher<std_msgs::msg::String>(status_topic, rclcpp::QoS(10));
     distance_error_pub_ =
       create_publisher<std_msgs::msg::Float32>(distance_error_topic, rclcpp::QoS(10));
+    target_distance_pub_ =
+      create_publisher<std_msgs::msg::Float32>(target_distance_topic, rclcpp::QoS(10));
 
     target_visible_sub_ = create_subscription<std_msgs::msg::Bool>(
       target_visible_topic, rclcpp::QoS(10),
@@ -245,11 +248,18 @@ private:
     std_msgs::msg::Float32 error_msg;
     error_msg.data = static_cast<float>(last_distance_error_);
     distance_error_pub_->publish(error_msg);
+
+    if (std::isfinite(last_measured_distance_) && last_measured_distance_ > 0.0) {
+      std_msgs::msg::Float32 distance_msg;
+      distance_msg.data = static_cast<float>(last_measured_distance_);
+      target_distance_pub_->publish(distance_msg);
+    }
   }
 
   geometry_msgs::msg::Twist compute_command(const rclcpp::Time & current_time, std::string & status)
   {
     last_distance_error_ = 0.0;
+    last_measured_distance_ = -1.0;
 
     if (!have_follower_enable_) {
       status = "WAITING_ENABLE";
@@ -291,6 +301,7 @@ private:
     }
 
     last_distance_error_ = measured_distance_ - target_distance_;
+    last_measured_distance_ = measured_distance_;
 
     if (measured_distance_ <= emergency_stop_distance_) {
       status = "TOO_CLOSE_STOP";
@@ -303,10 +314,11 @@ private:
 
     geometry_msgs::msg::Twist cmd;
     auto linear_x = kp_distance_ * last_distance_error_;
-    if (!enable_reverse_) {
+    if (!allow_distance_reverse_) {
       linear_x = std::max(0.0, linear_x);
     }
-    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
+    const auto min_linear_speed =
+      (enable_reverse_ && allow_distance_reverse_) ? -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
     cmd.angular.z = clamp(-kp_yaw_ * target_offset_x_, -max_angular_speed_, max_angular_speed_);
 
@@ -342,6 +354,7 @@ private:
     }
 
     last_distance_error_ = measured_distance - target_distance_;
+    last_measured_distance_ = measured_distance;
     if (measured_distance <= emergency_stop_distance_) {
       status = "TOO_CLOSE_STOP";
       return zero_twist();
@@ -353,6 +366,10 @@ private:
 
     geometry_msgs::msg::Twist cmd;
     auto linear_x = kp_distance_ * last_distance_error_;
+    if (!allow_distance_reverse_) {
+      linear_x = std::max(0.0, linear_x);
+    }
+    bool allow_reverse_command = false;
     if (
       platoon_mode_state_ == "FOLLOW" &&
       have_leader_cmd_ &&
@@ -360,9 +377,14 @@ private:
     {
       linear_x += latest_leader_cmd_.linear.x * leader_cmd_linear_gain_;
       cmd.angular.z += latest_leader_cmd_.angular.z * leader_cmd_angular_gain_;
+      allow_reverse_command =
+        mirror_leader_reverse_turn_ &&
+        latest_leader_cmd_.linear.x < -std::abs(leader_cmd_reverse_threshold_);
     }
 
-    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
+    const auto min_linear_speed =
+      (enable_reverse_ && (allow_distance_reverse_ || allow_reverse_command)) ?
+      -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
     const auto bearing_to_leader = std::atan2(dy, dx);
@@ -499,6 +521,7 @@ private:
   double heartbeat_timeout_;
   double leader_cmd_timeout_;
   bool enable_reverse_;
+  bool allow_distance_reverse_;
   bool mirror_leader_reverse_turn_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
@@ -529,6 +552,7 @@ private:
   double follower_y_{0.0};
   double follower_yaw_{0.0};
   double last_distance_error_{0.0};
+  double last_measured_distance_{-1.0};
   bool odom_offset_initialized_{false};
   double leader_origin_x_{0.0};
   double leader_origin_y_{0.0};
@@ -556,6 +580,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_raw_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr distance_error_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr target_distance_pub_;
   rclcpp::TimerBase::SharedPtr control_timer_;
 };
 

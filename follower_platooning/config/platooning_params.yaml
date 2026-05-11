@@ -2,7 +2,7 @@ follower_platooning:
   ros__parameters:
     platooning_mode: "odom"
 
-    target_distance: 0.45
+    target_distance: 0.47
     min_distance: 0.32
     max_distance: 0.70
     emergency_stop_distance: 0.20
@@ -19,14 +19,15 @@ follower_platooning:
     leader_cmd_timeout: 0.5
 
     enable_reverse: true
+    allow_distance_reverse: false
     mirror_leader_reverse_turn: true
     leader_cmd_linear_gain: 1.0
     leader_cmd_angular_gain: 1.0
     leader_cmd_reverse_threshold: 0.01
     leader_cmd_turn_threshold: 0.05
     leader_cmd_turn_linear_deadband: 0.02
-    use_initial_odom_offset: true
-    initial_leader_offset_x: 0.45
+    use_initial_odom_offset: false
+    initial_leader_offset_x: 0.47
     initial_leader_offset_y: 0.0
 
     target_visible_topic: "/follower/target_visible"
@@ -37,9 +38,17 @@ follower_platooning:
     platoon_mode_topic: "/leader/platoon_mode"
     heartbeat_topic: "/leader/heartbeat"
     leader_cmd_vel_topic: "/leader/cmd_vel"
-    leader_odom_topic: "/leader/odom"
+    leader_odom_topic: "/leader/odom_aligned"
     follower_odom_topic: "/odom"
 
     cmd_vel_raw_topic: "/follower/cmd_vel_raw"
     status_topic: "/follower/status"
     distance_error_topic: "/follower/distance_error"
+
+leader_odom_aligner:
+  ros__parameters:
+    initial_leader_offset_x: 0.47
+    initial_leader_offset_y: 0.0
+    leader_odom_topic: "/leader/odom"
+    follower_odom_topic: "/odom"
+    aligned_leader_odom_topic: "/leader/odom_aligned"

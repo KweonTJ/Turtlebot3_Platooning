@@ -21,7 +21,17 @@ ament_target_dependencies(
   nav_msgs
 )
 
-install(TARGETS follower_platooning_node
+add_executable(leader_odom_aligner_node src/leader_odom_aligner_node.cpp)
+ament_target_dependencies(
+  leader_odom_aligner_node
+  rclcpp
+  geometry_msgs
+  nav_msgs
+)
+
+install(TARGETS
+  follower_platooning_node
+  leader_odom_aligner_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -47,13 +47,14 @@
 | `/leader/platoon_mode` | `FOLLOW`, `STANDBY`, `STOP` 등 플래투닝 모드 |
 | `/leader/heartbeat` | 리더 생존 신호 |
 | `/leader/cmd_vel` | 리더 주행 명령 |
-| `/leader/odom` | 리더 odometry |
+| `/leader/odom` | 브릿지로 들어온 리더 원본 odometry |
+| `/leader/odom_aligned` | 팔로워 odom 좌표계로 정렬한 리더 odometry |
 
 ## 기본 파라미터
 
 | 항목 | 기본값 |
 | --- | ---: |
-| 목표 차간 거리 | `0.45 m` |
+| 목표 차간 거리 | `0.47 m` |
 | 최소 허용 거리 | `0.32 m` |
 | 최대 유효 거리 | `0.70 m` |
 | 긴급 정지 거리 | `0.20 m` |
@@ -61,6 +62,7 @@
 | 최대 각속도 | `0.45 rad/s` |
 | odom timeout | `0.5 s` |
 | heartbeat timeout | `1.0 s` |
+| 초기 리더 오프셋 | `x=0.47 m`, `y=0.0 m` |
 
 설정 파일:
 
@@ -68,6 +70,17 @@
 follower_platooning/config/platooning_params.yaml
 follower_safety/config/safety_params.yaml
 ```
+
+현재 실물 실험은 UWB 센서 없이 진행한다. 따라서 도메인 브릿지로 받은 리더
+`/leader/odom`을 절대 좌표로 직접 비교하지 않고, `leader_odom_aligner`가 팔로워
+odom 좌표계 기준 `/leader/odom_aligned`를 새로 발행한다. 노드 시작 시점에는
+리더가 팔로워 전방 `0.47 m` 위치에 있다고 가정한다. 실제 배치는 두 로봇의
+방향을 같게 맞추고, 리더 뒤쪽에 팔로워를 약 `47 cm` 간격으로 둔 뒤 팔로워
+플래투닝 런치를 시작한다.
+
+UWB가 추가되기 전까지는 초기 배치 오차가 곧 거리 제어 기준 오차가 된다. 실험
+시작 전 줄자 등으로 47 cm 간격을 맞추고, 저속에서 `/follower/target_distance`와
+`/follower/distance_error`를 먼저 확인한다.
 
 ## 설치 및 빌드
 
@@ -157,6 +170,8 @@ source ~/Desktop/Turtlebot3_Platooning/install/setup.bash
 ros2 topic echo /odom --once
 ros2 topic echo /follower/status --once
 ros2 topic echo /follower/safety_state --once
+ros2 topic echo /follower/target_distance --once
+ros2 topic echo /follower/distance_error --once
 ros2 topic echo /follower/cmd_vel_raw --once
 ros2 topic echo /cmd_vel --once
 ```
@@ -168,17 +183,25 @@ ros2 topic echo /leader/heartbeat --once
 ros2 topic echo /leader/platoon_mode --once
 ros2 topic echo /leader/cmd_vel --once
 ros2 topic echo /leader/odom --once
+ros2 topic echo /leader/odom_aligned --once
 ```
 
 ## 운용 흐름
 
 1. 리더 로봇이 `/leader/heartbeat`, `/leader/platoon_mode`, `/leader/follower_enable`, `/leader/cmd_vel`을 발행한다.
 2. 브릿지가 리더 도메인 `25`에서 팔로워 도메인 `73`으로 상태 토픽을 전달한다.
-3. 팔로워 로봇은 `/leader/odom`과 자신의 `/odom`을 비교해 리더와의 상대 거리를 계산한다.
-4. `follower_platooning`이 목표 거리 `0.45 m`를 기준으로 `/follower/cmd_vel_raw`를 계산한다.
-5. `follower_safety`가 heartbeat, 장애물, 속도 제한을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
+3. `leader_odom_aligner`는 시작 시점의 수동 초기 정렬을 `0.47 m` 리더 오프셋으로
+   잡고, 이후 브릿지된 `/leader/odom` 변화량을 팔로워 `/odom` 좌표계의
+   `/leader/odom_aligned`로 변환한다.
+4. `follower_platooning`은 `/leader/odom_aligned`와 자신의 `/odom`을 비교해 리더와의
+   상대 거리를 추정한다.
+5. `follower_platooning`이 목표 거리 `0.47 m`를 기준으로 `/follower/cmd_vel_raw`를 계산한다.
+6. `follower_safety`가 heartbeat, 장애물, 속도 제한을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
 
-이 odometry 기반 구성은 리더와 팔로워 odometry가 같은 기준으로 해석될 수 있다는 전제가 있다. 실제 로봇에서는 초기 정렬과 좌표 기준을 맞춘 뒤 저속으로 먼저 검증한다.
+이 odometry 기반 구성은 UWB/공통 위치 추정 없이 실험하기 위한 임시 구성이다.
+리더와 팔로워의 odom 원점이 서로 같다고 가정하지 않으며, 시작 시점의 물리적
+47 cm 정렬을 기준으로 이후 이동 변화량만 사용한다. UWB가 탑재되면 이 초기
+오프셋 가정 대신 실제 상대 거리 측정값으로 보정하는 구성이 필요하다.
 
 ## 안전 조건
 
@@ -238,11 +261,13 @@ GitHub repo: https://github.com/KweonTJ/Turtlebot3_Platooning.git
 ```bash
 ros2 topic echo /odom --once
 ros2 topic echo /leader/odom --once
+ros2 topic echo /leader/odom_aligned --once
 ```
 
 - 팔로워 로봇의 기본 odometry가 `/odom`으로 발행되는지 확인
 - 리더 워크스페이스가 `/leader/odom`을 발행하는지 확인
 - `platooning_bridge_config`가 리더 도메인 `25`에서 팔로워 도메인 `73`으로 `/leader/odom`을 브릿지하는지 확인
+- `leader_odom_aligner`가 `/leader/odom_aligned`를 발행하는지 확인
 
 ### 팔로워가 움직이지 않을 때
 
@@ -256,7 +281,7 @@ ros2 topic echo /follower/safety_state --once
 
 - `/leader/platoon_mode`가 `FOLLOW`인지 확인
 - `/leader/follower_enable`이 `true`인지 확인
-- `/leader/odom`과 `/odom`이 모두 들어오는지 확인
+- `/leader/odom`, `/leader/odom_aligned`, `/odom`이 모두 들어오는지 확인
 - `/follower/safety_state`가 `SAFE` 또는 허용 상태인지 확인
 
 ### `/follower/cmd_vel_raw`는 나오는데 `/cmd_vel`이 안 나올 때
