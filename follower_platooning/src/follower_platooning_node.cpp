@@ -326,8 +326,7 @@ private:
     if (!allow_distance_reverse_) {
       linear_x = std::max(0.0, linear_x);
     }
-    const auto min_linear_speed =
-      (enable_reverse_ && allow_distance_reverse_) ? -max_linear_speed_ : 0.0;
+    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
     cmd.angular.z = clamp(-kp_yaw_ * target_offset_x_, -max_angular_speed_, max_angular_speed_);
 
@@ -396,10 +395,11 @@ private:
     }
 
     geometry_msgs::msg::Twist cmd;
-    auto linear_x = kp_distance_ * last_distance_error_;
+    auto distance_linear_x = kp_distance_ * last_distance_error_;
     if (!allow_distance_reverse_) {
-      linear_x = std::max(0.0, linear_x);
+      distance_linear_x = std::max(0.0, distance_linear_x);
     }
+    auto linear_x = distance_linear_x;
     bool allow_reverse_command = false;
     if (
       platoon_mode_state_ == "FOLLOW" &&
@@ -412,9 +412,8 @@ private:
         mirror_leader_reverse_turn_ &&
         latest_leader_cmd_.linear.x < -std::abs(leader_cmd_reverse_threshold_);
     }
-    if (!allow_distance_reverse_) {
+    if (!allow_distance_reverse_ && !allow_reverse_command) {
       linear_x = std::max(0.0, linear_x);
-      allow_reverse_command = false;
     }
 
     const auto min_linear_speed =
@@ -462,8 +461,7 @@ private:
       return false;
     }
 
-    const auto min_linear_speed =
-      (enable_reverse_ && allow_distance_reverse_) ? -max_linear_speed_ : 0.0;
+    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
 
     if (reversing) {
       cmd.linear.x = clamp(
