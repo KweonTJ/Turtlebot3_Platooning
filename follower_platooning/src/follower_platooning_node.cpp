@@ -412,6 +412,10 @@ private:
         mirror_leader_reverse_turn_ &&
         latest_leader_cmd_.linear.x < -std::abs(leader_cmd_reverse_threshold_);
     }
+    if (!allow_distance_reverse_) {
+      linear_x = std::max(0.0, linear_x);
+      allow_reverse_command = false;
+    }
 
     const auto min_linear_speed =
       (enable_reverse_ && (allow_distance_reverse_ || allow_reverse_command)) ?
@@ -458,7 +462,8 @@ private:
       return false;
     }
 
-    const auto min_linear_speed = enable_reverse_ ? -max_linear_speed_ : 0.0;
+    const auto min_linear_speed =
+      (enable_reverse_ && allow_distance_reverse_) ? -max_linear_speed_ : 0.0;
 
     if (reversing) {
       cmd.linear.x = clamp(

@@ -20,13 +20,13 @@ follower_platooning:
     heartbeat_timeout: 1.0
     leader_cmd_timeout: 0.5
 
-    enable_reverse: true
+    enable_reverse: false
     allow_distance_reverse: false
     search_last_leader_pose: true
     allow_odom_without_heartbeat: true
-    mirror_leader_reverse_turn: true
-    leader_cmd_linear_gain: 1.0
-    leader_cmd_angular_gain: 1.0
+    mirror_leader_reverse_turn: false
+    leader_cmd_linear_gain: 0.0
+    leader_cmd_angular_gain: 0.0
     leader_cmd_reverse_threshold: 0.01
     leader_cmd_turn_threshold: 0.05
     leader_cmd_turn_linear_deadband: 0.02
