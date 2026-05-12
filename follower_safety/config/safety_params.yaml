@@ -3,9 +3,11 @@ follower_safety:
     front_obstacle_distance: 0.12
     side_obstacle_distance: 0.08
     front_angle_deg: 25.0
+    use_scan_safety: false
 
     marker_required: false
     heartbeat_required: true
+    allow_fresh_cmd_without_heartbeat: true
 
     heartbeat_timeout: 1.0
     cmd_vel_timeout: 0.5

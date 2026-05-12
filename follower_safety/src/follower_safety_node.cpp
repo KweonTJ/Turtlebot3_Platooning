@@ -48,9 +48,12 @@ public:
     front_obstacle_distance_ = declare_parameter<double>("front_obstacle_distance", 0.12);
     side_obstacle_distance_ = declare_parameter<double>("side_obstacle_distance", 0.08);
     front_angle_deg_ = declare_parameter<double>("front_angle_deg", 25.0);
+    use_scan_safety_ = declare_parameter<bool>("use_scan_safety", false);
 
     marker_required_ = declare_parameter<bool>("marker_required", true);
     heartbeat_required_ = declare_parameter<bool>("heartbeat_required", true);
+    allow_fresh_cmd_without_heartbeat_ =
+      declare_parameter<bool>("allow_fresh_cmd_without_heartbeat", true);
 
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     cmd_vel_timeout_ = declare_parameter<double>("cmd_vel_timeout", 0.5);
@@ -93,9 +96,11 @@ public:
     heartbeat_sub_ = create_subscription<std_msgs::msg::Bool>(
       heartbeat_topic, heartbeat_qos,
       std::bind(&FollowerSafetyNode::heartbeat_callback, this, std::placeholders::_1));
-    scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
-      scan_topic, rclcpp::SensorDataQoS(),
-      std::bind(&FollowerSafetyNode::scan_callback, this, std::placeholders::_1));
+    if (use_scan_safety_) {
+      scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
+        scan_topic, rclcpp::SensorDataQoS(),
+        std::bind(&FollowerSafetyNode::scan_callback, this, std::placeholders::_1));
+    }
 
     safety_timer_ = create_wall_timer(
       50ms, std::bind(&FollowerSafetyNode::safety_timer_callback, this));
@@ -162,13 +167,15 @@ private:
 
   geometry_msgs::msg::Twist filter_command(const rclcpp::Time & current_time, std::string & state)
   {
-    if (front_obstacle_) {
+    if (use_scan_safety_ && front_obstacle_) {
       state = "FRONT_OBSTACLE";
       return zero_twist();
     }
     if (heartbeat_required_ && heartbeat_timed_out(current_time)) {
-      state = "HEARTBEAT_TIMEOUT";
-      return zero_twist();
+      if (!allow_fresh_cmd_without_heartbeat_ || cmd_timed_out(current_time)) {
+        state = "HEARTBEAT_TIMEOUT";
+        return zero_twist();
+      }
     }
     if (cmd_timed_out(current_time)) {
       state = "CMD_TIMEOUT";
@@ -236,8 +243,10 @@ private:
   double front_obstacle_distance_;
   double side_obstacle_distance_;
   double front_angle_deg_;
+  bool use_scan_safety_;
   bool marker_required_;
   bool heartbeat_required_;
+  bool allow_fresh_cmd_without_heartbeat_;
   double heartbeat_timeout_;
   double cmd_vel_timeout_;
   bool allow_reverse_;

@@ -58,7 +58,7 @@ public:
   LeaderOdomAlignerNode()
   : Node("leader_odom_aligner")
   {
-    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.47);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
 
     const auto leader_odom_topic =
@@ -138,7 +138,7 @@ private:
     aligned_leader_odom_pub_->publish(aligned);
   }
 
-  double initial_leader_offset_x_{0.47};
+  double initial_leader_offset_x_{0.45};
   double initial_leader_offset_y_{0.0};
   bool have_leader_odom_{false};
   bool have_follower_odom_{false};

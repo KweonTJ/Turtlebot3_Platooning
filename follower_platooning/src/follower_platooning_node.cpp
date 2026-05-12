@@ -69,7 +69,7 @@ public:
   {
     platooning_mode_ = declare_parameter<std::string>("platooning_mode", "vision");
 
-    target_distance_ = declare_parameter<double>("target_distance", 0.20);
+    target_distance_ = declare_parameter<double>("target_distance", 0.45);
     min_distance_ = declare_parameter<double>("min_distance", 0.15);
     max_distance_ = declare_parameter<double>("max_distance", 0.30);
     emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.12);
@@ -82,11 +82,16 @@ public:
 
     marker_lost_timeout_ = declare_parameter<double>("marker_lost_timeout", 0.5);
     odom_timeout_ = declare_parameter<double>("odom_timeout", 0.5);
+    leader_search_timeout_ = declare_parameter<double>("leader_search_timeout", 5.0);
+    leader_search_stop_tolerance_ =
+      declare_parameter<double>("leader_search_stop_tolerance", 0.03);
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
     allow_distance_reverse_ = declare_parameter<bool>("allow_distance_reverse", false);
+    search_last_leader_pose_ = declare_parameter<bool>("search_last_leader_pose", true);
+    allow_odom_without_heartbeat_ = declare_parameter<bool>("allow_odom_without_heartbeat", true);
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
@@ -94,7 +99,7 @@ public:
     leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
     leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
-    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.47);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
 
     const auto target_visible_topic =
@@ -273,7 +278,11 @@ private:
       status = "WAITING_ENABLE";
       return zero_twist();
     }
-    if (heartbeat_timed_out(current_time)) {
+    if (
+      heartbeat_timed_out(current_time) &&
+      !(allow_odom_without_heartbeat_ && platooning_mode_ == "odom" &&
+      odom_reference_available(current_time)))
+    {
       status = "HEARTBEAT_TIMEOUT";
       return zero_twist();
     }
@@ -330,7 +339,22 @@ private:
     const rclcpp::Time & current_time,
     std::string & status)
   {
-    if (odom_timed_out(current_time)) {
+    if (!have_leader_odom_ || !have_follower_odom_) {
+      status = "ODOM_TIMEOUT";
+      return zero_twist();
+    }
+
+    const auto leader_age = (current_time - last_leader_odom_time_).seconds();
+    const auto follower_age = (current_time - last_follower_odom_time_).seconds();
+    if (follower_age > odom_timeout_) {
+      status = "ODOM_TIMEOUT";
+      return zero_twist();
+    }
+    const auto using_last_leader_pose = leader_age > odom_timeout_;
+    if (
+      using_last_leader_pose &&
+      (!search_last_leader_pose_ || leader_age > leader_search_timeout_))
+    {
       status = "ODOM_TIMEOUT";
       return zero_twist();
     }
@@ -363,6 +387,13 @@ private:
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
+    if (
+      using_last_leader_pose &&
+      std::abs(last_distance_error_) <= leader_search_stop_tolerance_)
+    {
+      status = "ODOM_SEARCH_HOLD";
+      return zero_twist();
+    }
 
     geometry_msgs::msg::Twist cmd;
     auto linear_x = kp_distance_ * last_distance_error_;
@@ -392,10 +423,14 @@ private:
     cmd.angular.z += kp_yaw_ * heading_error;
     cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed_, max_angular_speed_);
 
+    const auto status_prefix = using_last_leader_pose ?
+      "ODOM_SEARCH_LAST_LEADER" :
+      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING");
     std::ostringstream status_stream;
-    status_stream << "ODOM_FOLLOWING mode=" << platoon_mode_state_
+    status_stream << status_prefix << " mode=" << platoon_mode_state_
                   << " distance=" << measured_distance
-                  << " error=" << last_distance_error_;
+                  << " error=" << last_distance_error_
+                  << " leader_age=" << leader_age;
     status = status_stream.str();
     return cmd;
   }
@@ -502,6 +537,22 @@ private:
     return leader_age > odom_timeout_ || follower_age > odom_timeout_;
   }
 
+  bool odom_reference_available(const rclcpp::Time & current_time) const
+  {
+    if (!have_leader_odom_ || !have_follower_odom_) {
+      return false;
+    }
+    const auto leader_age = (current_time - last_leader_odom_time_).seconds();
+    const auto follower_age = (current_time - last_follower_odom_time_).seconds();
+    if (follower_age > odom_timeout_) {
+      return false;
+    }
+    if (leader_age <= odom_timeout_) {
+      return true;
+    }
+    return search_last_leader_pose_ && leader_age <= leader_search_timeout_;
+  }
+
   bool valid_distance() const
   {
     return std::isfinite(measured_distance_) && measured_distance_ > 0.0;
@@ -518,10 +569,14 @@ private:
   double max_angular_speed_;
   double marker_lost_timeout_;
   double odom_timeout_;
+  double leader_search_timeout_;
+  double leader_search_stop_tolerance_;
   double heartbeat_timeout_;
   double leader_cmd_timeout_;
   bool enable_reverse_;
   bool allow_distance_reverse_;
+  bool search_last_leader_pose_;
+  bool allow_odom_without_heartbeat_;
   bool mirror_leader_reverse_turn_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
