@@ -18,6 +18,7 @@ follower_platooning:
     leader_search_timeout: 5.0
     leader_search_stop_tolerance: 0.03
     heartbeat_timeout: 1.0
+    heartbeat_required: false
     leader_cmd_timeout: 0.5
 
     enable_reverse: true

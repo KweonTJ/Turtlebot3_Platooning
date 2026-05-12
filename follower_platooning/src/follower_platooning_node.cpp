@@ -88,6 +88,7 @@ public:
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
+    heartbeat_required_ = declare_parameter<bool>("heartbeat_required", false);
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
     allow_distance_reverse_ = declare_parameter<bool>("allow_distance_reverse", false);
     search_last_leader_pose_ = declare_parameter<bool>("search_last_leader_pose", true);
@@ -279,6 +280,7 @@ private:
       return zero_twist();
     }
     if (
+      heartbeat_required_ &&
       heartbeat_timed_out(current_time) &&
       !(allow_odom_without_heartbeat_ && platooning_mode_ == "odom" &&
       odom_reference_available(current_time)))
@@ -576,6 +578,7 @@ private:
   double leader_search_stop_tolerance_;
   double heartbeat_timeout_;
   double leader_cmd_timeout_;
+  bool heartbeat_required_;
   bool enable_reverse_;
   bool allow_distance_reverse_;
   bool search_last_leader_pose_;

@@ -172,6 +172,28 @@ def generate_launch_description():
             ]
         )
     )
+    use_platooning_with_safety = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                start_platooning,
+                "'.lower() == 'true' and '",
+                start_safety,
+                "'.lower() == 'true'",
+            ]
+        )
+    )
+    use_platooning_direct = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                start_platooning,
+                "'.lower() == 'true' and '",
+                start_safety,
+                "'.lower() == 'false'",
+            ]
+        )
+    )
 
     return LaunchDescription(
         [
@@ -187,7 +209,7 @@ def generate_launch_description():
             DeclareLaunchArgument("start_joint_state_publisher", default_value="false"),
             DeclareLaunchArgument("start_base_driver", default_value="true"),
             DeclareLaunchArgument("start_platooning", default_value="true"),
-            DeclareLaunchArgument("start_safety", default_value="true"),
+            DeclareLaunchArgument("start_safety", default_value="false"),
             DeclareLaunchArgument("usb_port", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("tb3_param_dir", default_value=default_tb3_param),
             DeclareLaunchArgument("start_monitor_uploader", default_value="true"),
@@ -290,8 +312,16 @@ def generate_launch_description():
                 executable="follower_platooning_node",
                 name="follower_platooning",
                 output="screen",
-                condition=IfCondition(start_platooning),
+                condition=use_platooning_with_safety,
                 parameters=[platooning_params],
+            ),
+            Node(
+                package="follower_platooning",
+                executable="follower_platooning_node",
+                name="follower_platooning",
+                output="screen",
+                condition=use_platooning_direct,
+                parameters=[platooning_params, {"cmd_vel_raw_topic": "/cmd_vel"}],
             ),
             Node(
                 package="follower_safety",
