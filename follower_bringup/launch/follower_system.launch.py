@@ -41,6 +41,8 @@ def generate_launch_description():
     start_rviz = LaunchConfiguration("start_rviz")
     start_joint_state_publisher = LaunchConfiguration("start_joint_state_publisher")
     start_base_driver = LaunchConfiguration("start_base_driver")
+    start_platooning = LaunchConfiguration("start_platooning")
+    start_safety = LaunchConfiguration("start_safety")
     usb_port = LaunchConfiguration("usb_port")
     tb3_param_dir = LaunchConfiguration("tb3_param_dir")
     start_monitor_uploader = LaunchConfiguration("start_monitor_uploader")
@@ -184,6 +186,8 @@ def generate_launch_description():
             DeclareLaunchArgument("start_rviz", default_value="false"),
             DeclareLaunchArgument("start_joint_state_publisher", default_value="false"),
             DeclareLaunchArgument("start_base_driver", default_value="true"),
+            DeclareLaunchArgument("start_platooning", default_value="true"),
+            DeclareLaunchArgument("start_safety", default_value="true"),
             DeclareLaunchArgument("usb_port", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("tb3_param_dir", default_value=default_tb3_param),
             DeclareLaunchArgument("start_monitor_uploader", default_value="true"),
@@ -278,6 +282,7 @@ def generate_launch_description():
                 executable="leader_odom_aligner_node",
                 name="leader_odom_aligner",
                 output="screen",
+                condition=IfCondition(start_platooning),
                 parameters=[platooning_params],
             ),
             Node(
@@ -285,6 +290,7 @@ def generate_launch_description():
                 executable="follower_platooning_node",
                 name="follower_platooning",
                 output="screen",
+                condition=IfCondition(start_platooning),
                 parameters=[platooning_params],
             ),
             Node(
@@ -292,6 +298,7 @@ def generate_launch_description():
                 executable="follower_safety_node",
                 name="follower_safety",
                 output="screen",
+                condition=IfCondition(start_safety),
                 parameters=[safety_params],
             ),
             Node(
