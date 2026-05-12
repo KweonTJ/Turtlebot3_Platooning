@@ -19,6 +19,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import Command
+from launch.substitutions import EnvironmentVariable
 from launch.substitutions import FindExecutable
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
@@ -42,6 +43,16 @@ def generate_launch_description():
     start_base_driver = LaunchConfiguration("start_base_driver")
     usb_port = LaunchConfiguration("usb_port")
     tb3_param_dir = LaunchConfiguration("tb3_param_dir")
+    start_monitor_uploader = LaunchConfiguration("start_monitor_uploader")
+    monitor_server = LaunchConfiguration("monitor_server")
+    monitor_token = LaunchConfiguration("monitor_token")
+    monitor_video_enabled = LaunchConfiguration("monitor_video_enabled")
+    monitor_status_period = LaunchConfiguration("monitor_status_period")
+    monitor_video_period = LaunchConfiguration("monitor_video_period")
+    monitor_jpeg_quality = LaunchConfiguration("monitor_jpeg_quality")
+    monitor_image_width = LaunchConfiguration("monitor_image_width")
+    monitor_image_height = LaunchConfiguration("monitor_image_height")
+    monitor_http_timeout = LaunchConfiguration("monitor_http_timeout")
 
     vision_params = PathJoinSubstitution(
         [
@@ -175,6 +186,25 @@ def generate_launch_description():
             DeclareLaunchArgument("start_base_driver", default_value="true"),
             DeclareLaunchArgument("usb_port", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("tb3_param_dir", default_value=default_tb3_param),
+            DeclareLaunchArgument("start_monitor_uploader", default_value="true"),
+            DeclareLaunchArgument(
+                "monitor_server",
+                default_value=EnvironmentVariable(
+                    "MONITOR_SERVER_URL",
+                    default_value="http://127.0.0.1:8080",
+                ),
+            ),
+            DeclareLaunchArgument(
+                "monitor_token",
+                default_value=EnvironmentVariable("MONITOR_TOKEN", default_value=""),
+            ),
+            DeclareLaunchArgument("monitor_video_enabled", default_value="true"),
+            DeclareLaunchArgument("monitor_status_period", default_value="0.2"),
+            DeclareLaunchArgument("monitor_video_period", default_value="0.25"),
+            DeclareLaunchArgument("monitor_jpeg_quality", default_value="65"),
+            DeclareLaunchArgument("monitor_image_width", default_value="640"),
+            DeclareLaunchArgument("monitor_image_height", default_value="480"),
+            DeclareLaunchArgument("monitor_http_timeout", default_value="1.0"),
             Node(
                 package="turtlebot3_node",
                 executable="turtlebot3_ros",
@@ -263,6 +293,25 @@ def generate_launch_description():
                 name="follower_safety",
                 output="screen",
                 parameters=[safety_params],
+            ),
+            Node(
+                package="follower_platooning",
+                executable="robot_status_uploader.py",
+                name="follower_status_uploader",
+                output="screen",
+                arguments=[
+                    "--robot", "follower",
+                    "--server", monitor_server,
+                    "--token", monitor_token,
+                    "--status-period", monitor_status_period,
+                    "--video-period", monitor_video_period,
+                    "--jpeg-quality", monitor_jpeg_quality,
+                    "--image-width", monitor_image_width,
+                    "--image-height", monitor_image_height,
+                    "--http-timeout", monitor_http_timeout,
+                    "--video-enabled", monitor_video_enabled,
+                ],
+                condition=IfCondition(start_monitor_uploader),
             ),
             Node(
                 package="rviz2",
