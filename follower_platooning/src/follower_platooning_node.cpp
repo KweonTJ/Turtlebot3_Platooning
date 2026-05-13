@@ -99,6 +99,11 @@ public:
     leader_cmd_reverse_threshold_ = declare_parameter<double>("leader_cmd_reverse_threshold", 0.01);
     leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
     leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
+    leader_reverse_max_distance_error_ =
+      declare_parameter<double>("leader_reverse_max_distance_error", 0.08);
+    odom_heading_deadband_ = declare_parameter<double>("odom_heading_deadband", 0.06);
+    odom_linear_heading_gate_ = declare_parameter<double>("odom_linear_heading_gate", 0.35);
+    cmd_angular_deadband_ = declare_parameter<double>("cmd_angular_deadband", 0.04);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
     initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
@@ -396,6 +401,10 @@ private:
       return zero_twist();
     }
 
+    const auto bearing_to_leader = std::atan2(dy, dx);
+    const auto heading_error = normalize_angle(bearing_to_leader - follower_yaw_);
+    const auto abs_heading_error = std::abs(heading_error);
+
     geometry_msgs::msg::Twist cmd;
     auto distance_linear_x = kp_distance_ * last_distance_error_;
     if (!allow_distance_reverse_) {
@@ -408,14 +417,32 @@ private:
       have_leader_cmd_ &&
       (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_)
     {
-      linear_x += latest_leader_cmd_.linear.x * leader_cmd_linear_gain_;
-      cmd.angular.z += latest_leader_cmd_.angular.z * leader_cmd_angular_gain_;
+      const auto leader_linear = latest_leader_cmd_.linear.x;
+      const auto leader_angular = latest_leader_cmd_.angular.z;
+      const auto leader_reversing =
+        leader_linear < -std::abs(leader_cmd_reverse_threshold_);
+      const auto leader_forward =
+        leader_linear > std::abs(leader_cmd_reverse_threshold_);
+      const auto leader_turning =
+        std::abs(leader_angular) > std::abs(leader_cmd_turn_threshold_) &&
+        std::abs(leader_linear) <= std::abs(leader_cmd_turn_linear_deadband_);
       allow_reverse_command =
         mirror_leader_reverse_turn_ &&
-        latest_leader_cmd_.linear.x < -std::abs(leader_cmd_reverse_threshold_);
+        leader_reversing &&
+        last_distance_error_ <= leader_reverse_max_distance_error_;
+      const auto allow_turn_command = mirror_leader_reverse_turn_ && leader_turning;
+      if (leader_forward || allow_reverse_command) {
+        linear_x += leader_linear * leader_cmd_linear_gain_;
+      }
+      if (leader_forward || allow_reverse_command || allow_turn_command) {
+        cmd.angular.z += leader_angular * leader_cmd_angular_gain_;
+      }
     }
     if (!allow_distance_reverse_ && !allow_reverse_command) {
       linear_x = std::max(0.0, linear_x);
+    }
+    if (abs_heading_error > odom_linear_heading_gate_) {
+      linear_x = 0.0;
     }
 
     const auto min_linear_speed =
@@ -423,9 +450,12 @@ private:
       -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
-    const auto bearing_to_leader = std::atan2(dy, dx);
-    const auto heading_error = normalize_angle(bearing_to_leader - follower_yaw_);
-    cmd.angular.z += kp_yaw_ * heading_error;
+    if (abs_heading_error > odom_heading_deadband_) {
+      cmd.angular.z += kp_yaw_ * heading_error;
+    }
+    if (std::abs(cmd.angular.z) < cmd_angular_deadband_) {
+      cmd.angular.z = 0.0;
+    }
     cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed_, max_angular_speed_);
 
     const auto status_prefix = using_last_leader_pose ?
@@ -435,7 +465,10 @@ private:
     status_stream << status_prefix << " mode=" << platoon_mode_state_
                   << " distance=" << measured_distance
                   << " error=" << last_distance_error_
-                  << " leader_age=" << leader_age;
+                  << " leader_age=" << leader_age
+                  << " heading=" << heading_error
+                  << " cmd_x=" << cmd.linear.x
+                  << " cmd_z=" << cmd.angular.z;
     status = status_stream.str();
     return cmd;
   }
@@ -589,6 +622,10 @@ private:
   double leader_cmd_reverse_threshold_;
   double leader_cmd_turn_threshold_;
   double leader_cmd_turn_linear_deadband_;
+  double leader_reverse_max_distance_error_;
+  double odom_heading_deadband_;
+  double odom_linear_heading_gate_;
+  double cmd_angular_deadband_;
   bool use_initial_odom_offset_;
   double initial_leader_offset_x_;
   double initial_leader_offset_y_;

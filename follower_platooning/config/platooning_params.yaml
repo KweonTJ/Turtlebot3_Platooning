@@ -8,10 +8,10 @@ follower_platooning:
     emergency_stop_distance: 0.20
 
     kp_distance: 0.70
-    kp_yaw: 0.80
+    kp_yaw: 0.45
 
     max_linear_speed: 0.14
-    max_angular_speed: 0.55
+    max_angular_speed: 0.22
 
     marker_lost_timeout: 0.5
     odom_timeout: 1.0
@@ -27,10 +27,14 @@ follower_platooning:
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true
     leader_cmd_linear_gain: 1.2
-    leader_cmd_angular_gain: 1.1
+    leader_cmd_angular_gain: 0.45
     leader_cmd_reverse_threshold: 0.01
-    leader_cmd_turn_threshold: 0.05
+    leader_cmd_turn_threshold: 0.12
     leader_cmd_turn_linear_deadband: 0.02
+    leader_reverse_max_distance_error: 0.08
+    odom_heading_deadband: 0.12
+    odom_linear_heading_gate: 0.35
+    cmd_angular_deadband: 0.04
     use_initial_odom_offset: false
     initial_leader_offset_x: 0.45
     initial_leader_offset_y: 0.0
