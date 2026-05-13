@@ -96,8 +96,13 @@ public:
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
     use_leader_linear_feedforward_ =
       declare_parameter<bool>("use_leader_linear_feedforward", false);
+    hold_when_leader_stopped_ = declare_parameter<bool>("hold_when_leader_stopped", true);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
+    leader_stopped_linear_threshold_ =
+      declare_parameter<double>("leader_stopped_linear_threshold", 0.015);
+    leader_stopped_angular_threshold_ =
+      declare_parameter<double>("leader_stopped_angular_threshold", 0.04);
     leader_cmd_reverse_threshold_ = declare_parameter<double>("leader_cmd_reverse_threshold", 0.01);
     leader_cmd_turn_threshold_ = declare_parameter<double>("leader_cmd_turn_threshold", 0.05);
     leader_cmd_turn_linear_deadband_ = declare_parameter<double>("leader_cmd_turn_linear_deadband", 0.02);
@@ -407,10 +412,29 @@ private:
     const auto bearing_to_leader = std::atan2(dy, dx);
     const auto heading_error = normalize_angle(bearing_to_leader - follower_yaw_);
     const auto abs_heading_error = std::abs(heading_error);
+    const auto leader_cmd_fresh =
+      have_leader_cmd_ &&
+      (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_;
+    const auto leader_linear = leader_cmd_fresh ? latest_leader_cmd_.linear.x : 0.0;
+    const auto leader_angular = leader_cmd_fresh ? latest_leader_cmd_.angular.z : 0.0;
+    const auto leader_stopped =
+      !leader_cmd_fresh ||
+      (std::abs(leader_linear) <= std::abs(leader_stopped_linear_threshold_) &&
+      std::abs(leader_angular) <= std::abs(leader_stopped_angular_threshold_));
+    const auto within_hold_band =
+      measured_distance >= min_distance_ && measured_distance <= max_distance_;
+    const auto holding_stopped_leader =
+      hold_when_leader_stopped_ && leader_stopped && within_hold_band;
 
     geometry_msgs::msg::Twist cmd;
     auto distance_linear_x = 0.0;
-    if (std::abs(last_distance_error_) > distance_deadband_) {
+    if (holding_stopped_leader) {
+      distance_linear_x = 0.0;
+    } else if (hold_when_leader_stopped_ && leader_stopped && measured_distance > max_distance_) {
+      distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
+    } else if (hold_when_leader_stopped_ && leader_stopped && measured_distance < min_distance_) {
+      distance_linear_x = kp_distance_ * (measured_distance - min_distance_);
+    } else if (std::abs(last_distance_error_) > distance_deadband_) {
       distance_linear_x = kp_distance_ * last_distance_error_;
     }
     if (!allow_distance_reverse_) {
@@ -419,13 +443,7 @@ private:
     auto linear_x = distance_linear_x;
     bool allow_reverse_command = false;
     double leader_feedforward_x = 0.0;
-    if (
-      platoon_mode_state_ == "FOLLOW" &&
-      have_leader_cmd_ &&
-      (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_)
-    {
-      const auto leader_linear = latest_leader_cmd_.linear.x;
-      const auto leader_angular = latest_leader_cmd_.angular.z;
+    if (platoon_mode_state_ == "FOLLOW" && leader_cmd_fresh) {
       const auto leader_reversing =
         leader_linear < -std::abs(leader_cmd_reverse_threshold_);
       const auto leader_forward =
@@ -465,8 +483,11 @@ private:
       -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
-    if (abs_heading_error > odom_heading_deadband_) {
+    if (!holding_stopped_leader && abs_heading_error > odom_heading_deadband_) {
       cmd.angular.z += kp_yaw_ * heading_error;
+    }
+    if (holding_stopped_leader) {
+      cmd.angular.z = 0.0;
     }
     if (std::abs(cmd.angular.z) < cmd_angular_deadband_) {
       cmd.angular.z = 0.0;
@@ -475,7 +496,8 @@ private:
 
     const auto status_prefix = using_last_leader_pose ?
       "ODOM_SEARCH_LAST_LEADER" :
-      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING");
+      (holding_stopped_leader ? "ODOM_HOLD_STOPPED_LEADER" :
+      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING"));
     std::ostringstream status_stream;
     status_stream << status_prefix << " mode=" << platoon_mode_state_
                   << " distance=" << measured_distance
@@ -484,6 +506,8 @@ private:
                   << " heading=" << heading_error
                   << " dist_x=" << distance_linear_x
                   << " ff_x=" << leader_feedforward_x
+                  << " leader_stopped=" << leader_stopped
+                  << " hold_band=" << within_hold_band
                   << " cmd_x=" << cmd.linear.x
                   << " cmd_z=" << cmd.angular.z;
     status = status_stream.str();
@@ -635,8 +659,11 @@ private:
   bool allow_odom_without_heartbeat_;
   bool mirror_leader_reverse_turn_;
   bool use_leader_linear_feedforward_;
+  bool hold_when_leader_stopped_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
+  double leader_stopped_linear_threshold_;
+  double leader_stopped_angular_threshold_;
   double leader_cmd_reverse_threshold_;
   double leader_cmd_turn_threshold_;
   double leader_cmd_turn_linear_deadband_;

@@ -3,8 +3,8 @@ follower_platooning:
     platooning_mode: "odom"
 
     target_distance: 0.45
-    min_distance: 0.32
-    max_distance: 0.70
+    min_distance: 0.35
+    max_distance: 0.55
     emergency_stop_distance: 0.20
 
     kp_distance: 0.70
@@ -27,8 +27,11 @@ follower_platooning:
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true
     use_leader_linear_feedforward: false
+    hold_when_leader_stopped: true
     leader_cmd_linear_gain: 0.0
     leader_cmd_angular_gain: 0.45
+    leader_stopped_linear_threshold: 0.015
+    leader_stopped_angular_threshold: 0.04
     leader_cmd_reverse_threshold: 0.01
     leader_cmd_turn_threshold: 0.12
     leader_cmd_turn_linear_deadband: 0.02
