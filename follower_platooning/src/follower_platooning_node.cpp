@@ -94,6 +94,8 @@ public:
     search_last_leader_pose_ = declare_parameter<bool>("search_last_leader_pose", true);
     allow_odom_without_heartbeat_ = declare_parameter<bool>("allow_odom_without_heartbeat", true);
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
+    use_leader_linear_feedforward_ =
+      declare_parameter<bool>("use_leader_linear_feedforward", false);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
     leader_cmd_reverse_threshold_ = declare_parameter<double>("leader_cmd_reverse_threshold", 0.01);
@@ -436,7 +438,11 @@ private:
         leader_reversing &&
         last_distance_error_ <= leader_reverse_max_distance_error_;
       const auto allow_turn_command = mirror_leader_reverse_turn_ && leader_turning;
-      if (leader_forward && last_distance_error_ > distance_deadband_) {
+      if (
+        use_leader_linear_feedforward_ &&
+        leader_forward &&
+        last_distance_error_ > distance_deadband_)
+      {
         leader_feedforward_x = leader_linear * leader_cmd_linear_gain_;
         linear_x += leader_feedforward_x;
       } else if (allow_reverse_command) {
@@ -628,6 +634,7 @@ private:
   bool search_last_leader_pose_;
   bool allow_odom_without_heartbeat_;
   bool mirror_leader_reverse_turn_;
+  bool use_leader_linear_feedforward_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
   double leader_cmd_reverse_threshold_;
