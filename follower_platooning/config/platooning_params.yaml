@@ -7,27 +7,27 @@ follower_platooning:
     max_distance: 0.70
     emergency_stop_distance: 0.20
 
-    kp_distance: 0.45
+    kp_distance: 0.70
     kp_yaw: 0.80
 
-    max_linear_speed: 0.10
-    max_angular_speed: 0.45
+    max_linear_speed: 0.14
+    max_angular_speed: 0.55
 
     marker_lost_timeout: 0.5
-    odom_timeout: 0.5
-    leader_search_timeout: 5.0
+    odom_timeout: 1.0
+    leader_search_timeout: 12.0
     leader_search_stop_tolerance: 0.03
     heartbeat_timeout: 1.0
     heartbeat_required: false
-    leader_cmd_timeout: 0.5
+    leader_cmd_timeout: 1.0
 
     enable_reverse: true
     allow_distance_reverse: false
     search_last_leader_pose: true
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true
-    leader_cmd_linear_gain: 1.0
-    leader_cmd_angular_gain: 1.0
+    leader_cmd_linear_gain: 1.2
+    leader_cmd_angular_gain: 1.1
     leader_cmd_reverse_threshold: 0.01
     leader_cmd_turn_threshold: 0.05
     leader_cmd_turn_linear_deadband: 0.02
