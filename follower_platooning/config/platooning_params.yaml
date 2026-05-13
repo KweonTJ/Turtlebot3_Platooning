@@ -32,6 +32,7 @@ follower_platooning:
     leader_cmd_turn_threshold: 0.12
     leader_cmd_turn_linear_deadband: 0.02
     leader_reverse_max_distance_error: 0.08
+    distance_deadband: 0.03
     odom_heading_deadband: 0.12
     odom_linear_heading_gate: 0.35
     cmd_angular_deadband: 0.04
