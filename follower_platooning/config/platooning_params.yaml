@@ -23,6 +23,7 @@ follower_platooning:
 
     enable_reverse: true
     allow_distance_reverse: true
+    close_reverse_min_speed: 0.035
     search_last_leader_pose: true
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true

@@ -91,6 +91,7 @@ public:
     heartbeat_required_ = declare_parameter<bool>("heartbeat_required", false);
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
     allow_distance_reverse_ = declare_parameter<bool>("allow_distance_reverse", false);
+    close_reverse_min_speed_ = declare_parameter<double>("close_reverse_min_speed", 0.03);
     search_last_leader_pose_ = declare_parameter<bool>("search_last_leader_pose", true);
     allow_odom_without_heartbeat_ = declare_parameter<bool>("allow_odom_without_heartbeat", true);
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
@@ -421,6 +422,7 @@ private:
       !leader_cmd_fresh ||
       (std::abs(leader_linear) <= std::abs(leader_stopped_linear_threshold_) &&
       std::abs(leader_angular) <= std::abs(leader_stopped_angular_threshold_));
+    const auto too_close_for_spacing = measured_distance < min_distance_;
     const auto within_hold_band =
       measured_distance >= min_distance_ && measured_distance <= max_distance_;
     const auto holding_stopped_leader =
@@ -432,13 +434,15 @@ private:
       distance_linear_x = 0.0;
     } else if (hold_when_leader_stopped_ && leader_stopped && measured_distance > max_distance_) {
       distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
-    } else if (hold_when_leader_stopped_ && leader_stopped && measured_distance < min_distance_) {
+    } else if (hold_when_leader_stopped_ && leader_stopped && too_close_for_spacing) {
       distance_linear_x = kp_distance_ * (measured_distance - min_distance_);
     } else if (std::abs(last_distance_error_) > distance_deadband_) {
       distance_linear_x = kp_distance_ * last_distance_error_;
     }
     if (!allow_distance_reverse_) {
       distance_linear_x = std::max(0.0, distance_linear_x);
+    } else if (enable_reverse_ && too_close_for_spacing && distance_linear_x < 0.0) {
+      distance_linear_x = std::min(distance_linear_x, -std::abs(close_reverse_min_speed_));
     }
     auto linear_x = distance_linear_x;
     bool allow_reverse_command = false;
@@ -474,7 +478,8 @@ private:
     if (!allow_distance_reverse_ && !allow_reverse_command) {
       linear_x = std::max(0.0, linear_x);
     }
-    if (abs_heading_error > odom_linear_heading_gate_) {
+    const auto reversing_for_spacing = linear_x < 0.0 && too_close_for_spacing;
+    if (abs_heading_error > odom_linear_heading_gate_ && !reversing_for_spacing) {
       linear_x = 0.0;
     }
 
@@ -483,10 +488,10 @@ private:
       -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
-    if (!holding_stopped_leader && abs_heading_error > odom_heading_deadband_) {
+    if (!holding_stopped_leader && !reversing_for_spacing && abs_heading_error > odom_heading_deadband_) {
       cmd.angular.z += kp_yaw_ * heading_error;
     }
-    if (holding_stopped_leader) {
+    if (holding_stopped_leader || reversing_for_spacing) {
       cmd.angular.z = 0.0;
     }
     if (std::abs(cmd.angular.z) < cmd_angular_deadband_) {
@@ -496,8 +501,9 @@ private:
 
     const auto status_prefix = using_last_leader_pose ?
       "ODOM_SEARCH_LAST_LEADER" :
+      (reversing_for_spacing ? "ODOM_TOO_CLOSE_REVERSE" :
       (holding_stopped_leader ? "ODOM_HOLD_STOPPED_LEADER" :
-      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING"));
+      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING")));
     std::ostringstream status_stream;
     status_stream << status_prefix << " mode=" << platoon_mode_state_
                   << " distance=" << measured_distance
@@ -508,6 +514,7 @@ private:
                   << " ff_x=" << leader_feedforward_x
                   << " leader_stopped=" << leader_stopped
                   << " hold_band=" << within_hold_band
+                  << " too_close=" << too_close_for_spacing
                   << " cmd_x=" << cmd.linear.x
                   << " cmd_z=" << cmd.angular.z;
     status = status_stream.str();
@@ -655,6 +662,7 @@ private:
   bool heartbeat_required_;
   bool enable_reverse_;
   bool allow_distance_reverse_;
+  double close_reverse_min_speed_;
   bool search_last_leader_pose_;
   bool allow_odom_without_heartbeat_;
   bool mirror_leader_reverse_turn_;
