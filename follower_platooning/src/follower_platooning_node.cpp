@@ -422,6 +422,7 @@ private:
       !leader_cmd_fresh ||
       (std::abs(leader_linear) <= std::abs(leader_stopped_linear_threshold_) &&
       std::abs(leader_angular) <= std::abs(leader_stopped_angular_threshold_));
+    const auto at_or_inside_min_distance = measured_distance <= min_distance_;
     const auto too_close_for_spacing = measured_distance < min_distance_;
     const auto within_hold_band =
       measured_distance >= min_distance_ && measured_distance <= max_distance_;
@@ -478,6 +479,9 @@ private:
     if (!allow_distance_reverse_ && !allow_reverse_command) {
       linear_x = std::max(0.0, linear_x);
     }
+    if (at_or_inside_min_distance && linear_x > 0.0) {
+      linear_x = 0.0;
+    }
     const auto reversing_for_spacing = linear_x < 0.0 && too_close_for_spacing;
     if (abs_heading_error > odom_linear_heading_gate_ && !reversing_for_spacing) {
       linear_x = 0.0;
@@ -502,8 +506,9 @@ private:
     const auto status_prefix = using_last_leader_pose ?
       "ODOM_SEARCH_LAST_LEADER" :
       (reversing_for_spacing ? "ODOM_TOO_CLOSE_REVERSE" :
+      (at_or_inside_min_distance && std::abs(cmd.linear.x) < 1e-6 ? "ODOM_MIN_DISTANCE_HOLD" :
       (holding_stopped_leader ? "ODOM_HOLD_STOPPED_LEADER" :
-      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING")));
+      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING"))));
     std::ostringstream status_stream;
     status_stream << status_prefix << " mode=" << platoon_mode_state_
                   << " distance=" << measured_distance

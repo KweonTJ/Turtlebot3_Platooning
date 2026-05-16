@@ -22,6 +22,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/string.hpp"
 
 using namespace std::chrono_literals;
@@ -54,9 +55,13 @@ public:
     heartbeat_required_ = declare_parameter<bool>("heartbeat_required", true);
     allow_fresh_cmd_without_heartbeat_ =
       declare_parameter<bool>("allow_fresh_cmd_without_heartbeat", true);
+    use_distance_safety_ = declare_parameter<bool>("use_distance_safety", true);
 
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     cmd_vel_timeout_ = declare_parameter<double>("cmd_vel_timeout", 0.5);
+    distance_timeout_ = declare_parameter<double>("distance_timeout", 0.5);
+    min_distance_ = declare_parameter<double>("min_distance", 0.35);
+    emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.20);
 
     allow_reverse_ = declare_parameter<bool>("allow_reverse", false);
     allow_untracked_reverse_or_turn_ =
@@ -73,6 +78,8 @@ public:
       declare_parameter<std::string>("cmd_vel_raw_topic", "/follower/cmd_vel_raw");
     const auto target_visible_topic =
       declare_parameter<std::string>("target_visible_topic", "/follower/target_visible");
+    const auto target_distance_topic =
+      declare_parameter<std::string>("target_distance_topic", "/follower/target_distance");
     const auto heartbeat_topic =
       declare_parameter<std::string>("heartbeat_topic", "/leader/heartbeat");
     const auto scan_topic = declare_parameter<std::string>("scan_topic", "/scan");
@@ -91,6 +98,9 @@ public:
     target_visible_sub_ = create_subscription<std_msgs::msg::Bool>(
       target_visible_topic, rclcpp::QoS(10),
       std::bind(&FollowerSafetyNode::target_visible_callback, this, std::placeholders::_1));
+    target_distance_sub_ = create_subscription<std_msgs::msg::Float32>(
+      target_distance_topic, rclcpp::QoS(10),
+      std::bind(&FollowerSafetyNode::target_distance_callback, this, std::placeholders::_1));
     const auto heartbeat_qos =
       rclcpp::QoS(rclcpp::KeepLast(3)).best_effort().durability_volatile();
     heartbeat_sub_ = create_subscription<std_msgs::msg::Bool>(
@@ -118,6 +128,13 @@ private:
   {
     target_visible_ = msg->data;
     have_target_visible_ = true;
+  }
+
+  void target_distance_callback(const std_msgs::msg::Float32::ConstSharedPtr msg)
+  {
+    target_distance_ = msg->data;
+    have_target_distance_ = std::isfinite(target_distance_) && target_distance_ > 0.0;
+    last_target_distance_time_ = now();
   }
 
   void heartbeat_callback(const std_msgs::msg::Bool::ConstSharedPtr)
@@ -181,6 +198,10 @@ private:
       state = "CMD_TIMEOUT";
       return zero_twist();
     }
+    if (use_distance_safety_ && distance_timed_out(current_time)) {
+      state = "DISTANCE_TIMEOUT";
+      return zero_twist();
+    }
     if (!marker_gate_allows_command()) {
       state = "TARGET_LOST";
       return zero_twist();
@@ -198,6 +219,22 @@ private:
 
     if (!allow_reverse_ && filtered.linear.x < 0.0) {
       filtered.linear.x = 0.0;
+    }
+
+    if (use_distance_safety_ && have_target_distance_) {
+      if (target_distance_ <= emergency_stop_distance_) {
+        state = "DISTANCE_EMERGENCY_STOP";
+        return zero_twist();
+      }
+      if (target_distance_ < min_distance_ && filtered.linear.x < 0.0) {
+        filtered.angular.z = 0.0;
+        state = "MIN_DISTANCE_REVERSE";
+        return filtered;
+      }
+      if (target_distance_ <= min_distance_) {
+        state = "MIN_DISTANCE_STOP";
+        return zero_twist();
+      }
     }
 
     if (std::abs(filtered.linear.x) < 1e-6 && std::abs(filtered.angular.z) < 1e-6) {
@@ -240,6 +277,14 @@ private:
     return (current_time - last_cmd_time_).seconds() > cmd_vel_timeout_;
   }
 
+  bool distance_timed_out(const rclcpp::Time & current_time) const
+  {
+    if (!have_target_distance_) {
+      return true;
+    }
+    return (current_time - last_target_distance_time_).seconds() > distance_timeout_;
+  }
+
   double front_obstacle_distance_;
   double side_obstacle_distance_;
   double front_angle_deg_;
@@ -247,8 +292,12 @@ private:
   bool marker_required_;
   bool heartbeat_required_;
   bool allow_fresh_cmd_without_heartbeat_;
+  bool use_distance_safety_;
   double heartbeat_timeout_;
   double cmd_vel_timeout_;
+  double distance_timeout_;
+  double min_distance_;
+  double emergency_stop_distance_;
   bool allow_reverse_;
   bool allow_untracked_reverse_or_turn_;
   double untracked_reverse_threshold_;
@@ -261,14 +310,18 @@ private:
   bool have_cmd_{false};
   bool target_visible_{false};
   bool have_target_visible_{false};
+  double target_distance_{-1.0};
+  bool have_target_distance_{false};
   bool have_heartbeat_{false};
   bool front_obstacle_{false};
 
   rclcpp::Time last_cmd_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_heartbeat_time_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_raw_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr target_visible_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_distance_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heartbeat_sub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
