@@ -41,7 +41,7 @@ follower_platooning:
     odom_heading_deadband: 0.12
     odom_linear_heading_gate: 0.35
     cmd_angular_deadband: 0.04
-    use_initial_odom_offset: false
+    use_initial_odom_offset: true
     initial_leader_offset_x: 0.45
     initial_leader_offset_y: 0.0
 
