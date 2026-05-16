@@ -431,12 +431,12 @@ private:
 
     geometry_msgs::msg::Twist cmd;
     auto distance_linear_x = 0.0;
-    if (holding_stopped_leader) {
-      distance_linear_x = 0.0;
-    } else if (hold_when_leader_stopped_ && leader_stopped && measured_distance > max_distance_) {
-      distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
-    } else if (hold_when_leader_stopped_ && leader_stopped && too_close_for_spacing) {
+    if (too_close_for_spacing) {
       distance_linear_x = kp_distance_ * (measured_distance - min_distance_);
+    } else if (holding_stopped_leader || (hold_when_leader_stopped_ && leader_stopped)) {
+      distance_linear_x = 0.0;
+    } else if (measured_distance > max_distance_) {
+      distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
     } else if (std::abs(last_distance_error_) > distance_deadband_) {
       distance_linear_x = kp_distance_ * last_distance_error_;
     }
@@ -461,11 +461,7 @@ private:
         leader_reversing &&
         last_distance_error_ <= leader_reverse_max_distance_error_;
       const auto allow_turn_command = mirror_leader_reverse_turn_ && leader_turning;
-      if (
-        use_leader_linear_feedforward_ &&
-        leader_forward &&
-        last_distance_error_ > distance_deadband_)
-      {
+      if (use_leader_linear_feedforward_ && leader_forward && !too_close_for_spacing) {
         leader_feedforward_x = leader_linear * leader_cmd_linear_gain_;
         linear_x += leader_feedforward_x;
       } else if (allow_reverse_command) {

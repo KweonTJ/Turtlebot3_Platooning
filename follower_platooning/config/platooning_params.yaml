@@ -27,10 +27,10 @@ follower_platooning:
     search_last_leader_pose: true
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true
-    use_leader_linear_feedforward: false
+    use_leader_linear_feedforward: true
     hold_when_leader_stopped: true
-    leader_cmd_linear_gain: 0.0
-    leader_cmd_angular_gain: 0.45
+    leader_cmd_linear_gain: 1.0
+    leader_cmd_angular_gain: 1.0
     leader_stopped_linear_threshold: 0.015
     leader_stopped_angular_threshold: 0.04
     leader_cmd_reverse_threshold: 0.01
