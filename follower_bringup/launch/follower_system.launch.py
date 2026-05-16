@@ -209,7 +209,7 @@ def generate_launch_description():
             DeclareLaunchArgument("start_joint_state_publisher", default_value="false"),
             DeclareLaunchArgument("start_base_driver", default_value="true"),
             DeclareLaunchArgument("start_platooning", default_value="true"),
-            DeclareLaunchArgument("start_safety", default_value="false"),
+            DeclareLaunchArgument("start_safety", default_value="true"),
             DeclareLaunchArgument("usb_port", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("tb3_param_dir", default_value=default_tb3_param),
             DeclareLaunchArgument("start_monitor_uploader", default_value="true"),
