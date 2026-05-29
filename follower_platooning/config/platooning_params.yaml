@@ -10,10 +10,10 @@ follower_platooning:
     emergency_stop_distance: 0.15
 
     kp_distance: 0.95
-    kp_yaw: 0.45
+    kp_yaw: 0.65
 
-    max_linear_speed: 0.18
-    max_angular_speed: 0.35
+    max_linear_speed: 0.22
+    max_angular_speed: 0.45
 
     marker_lost_timeout: 0.5
     odom_timeout: 1.0
@@ -31,10 +31,10 @@ follower_platooning:
     mirror_leader_reverse_turn: true
     use_leader_linear_feedforward: true
     hold_when_leader_stopped: true
-    leader_cmd_linear_gain: 1.15
+    leader_cmd_linear_gain: 1.25
     # Mirror the leader's angular command with the same ROS yaw sign.
     # Odom heading correction still uses kp_yaw below.
-    leader_cmd_angular_gain: 1.0
+    leader_cmd_angular_gain: 0.55
     leader_stopped_linear_threshold: 0.015
     leader_stopped_angular_threshold: 0.04
     leader_cmd_reverse_threshold: 0.01
@@ -42,11 +42,12 @@ follower_platooning:
     leader_cmd_turn_linear_deadband: 0.02
     leader_reverse_max_distance_error: 0.08
     distance_deadband: 0.03
-    odom_heading_deadband: 0.12
+    odom_heading_deadband: 0.06
     odom_linear_heading_gate: 0.35
     far_catchup_use_max_speed: true
     far_catchup_heading_gate: 0.90
-    cmd_angular_deadband: 0.04
+    far_catchup_angular_feedforward_scale: 0.35
+    cmd_angular_deadband: 0.02
     use_initial_odom_offset: true
     initial_leader_offset_x: 0.30
     initial_leader_offset_y: 0.0

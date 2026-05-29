@@ -123,6 +123,8 @@ public:
     odom_linear_heading_gate_ = declare_parameter<double>("odom_linear_heading_gate", 0.35);
     far_catchup_use_max_speed_ = declare_parameter<bool>("far_catchup_use_max_speed", true);
     far_catchup_heading_gate_ = declare_parameter<double>("far_catchup_heading_gate", 0.90);
+    far_catchup_angular_feedforward_scale_ =
+      declare_parameter<double>("far_catchup_angular_feedforward_scale", 0.35);
     cmd_angular_deadband_ = declare_parameter<double>("cmd_angular_deadband", 0.04);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
     initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.30);
@@ -489,6 +491,7 @@ private:
     auto linear_x = distance_linear_x;
     bool allow_reverse_command = false;
     double leader_feedforward_x = 0.0;
+    double leader_feedforward_z = 0.0;
     if (platoon_mode_state_ == "FOLLOW" && leader_cmd_fresh) {
       const auto leader_reversing =
         leader_linear < -std::abs(leader_cmd_reverse_threshold_);
@@ -510,7 +513,11 @@ private:
         linear_x += leader_feedforward_x;
       }
       if (leader_forward || allow_reverse_command || allow_turn_command) {
-        cmd.angular.z += leader_angular * leader_cmd_angular_gain_;
+        const auto angular_gain = far_for_catchup ?
+          leader_cmd_angular_gain_ * far_catchup_angular_feedforward_scale_ :
+          leader_cmd_angular_gain_;
+        leader_feedforward_z = leader_angular * angular_gain;
+        cmd.angular.z += leader_feedforward_z;
       }
     }
     if (!allow_distance_reverse_ && !allow_reverse_command) {
@@ -556,6 +563,7 @@ private:
                   << " heading=" << heading_error
                   << " dist_x=" << distance_linear_x
                   << " ff_x=" << leader_feedforward_x
+                  << " ff_z=" << leader_feedforward_z
                   << " leader_stopped=" << leader_stopped
                   << " hold_band=" << within_hold_band
                   << " catchup=" << far_for_catchup
@@ -739,6 +747,7 @@ private:
   double odom_linear_heading_gate_;
   bool far_catchup_use_max_speed_;
   double far_catchup_heading_gate_;
+  double far_catchup_angular_feedforward_scale_;
   double cmd_angular_deadband_;
   bool use_initial_odom_offset_;
   double initial_leader_offset_x_;

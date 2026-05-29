@@ -22,7 +22,7 @@ follower_safety:
     untracked_turn_threshold: 0.05
     untracked_turn_linear_deadband: 0.02
 
-    max_linear_speed: 0.18
+    max_linear_speed: 0.22
     max_angular_speed: 0.45
 
     cmd_vel_raw_topic: "/follower/cmd_vel_raw"
