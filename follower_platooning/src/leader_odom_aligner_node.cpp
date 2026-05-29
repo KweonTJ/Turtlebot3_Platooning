@@ -152,14 +152,21 @@ private:
       "odom" : latest_follower_odom_.header.frame_id;
     aligned.child_frame_id = "leader_base_footprint_aligned";
 
-    const auto leader_dx = latest_leader_odom_.pose.pose.position.x - leader_origin_x_;
-    const auto leader_dy = latest_leader_odom_.pose.pose.position.y - leader_origin_y_;
-    aligned.pose.pose.position.x = follower_origin_x_ + initial_offset_world_x_ + leader_dx;
-    aligned.pose.pose.position.y = follower_origin_y_ + initial_offset_world_y_ + leader_dy;
-
     const auto leader_yaw = yaw_from_quaternion(latest_leader_odom_.pose.pose.orientation);
     const auto leader_yaw_delta = normalize_angle(leader_yaw - leader_origin_yaw_);
     aligned.pose.pose.orientation = quaternion_from_yaw(follower_origin_yaw_ + leader_yaw_delta);
+
+    const auto leader_dx = latest_leader_odom_.pose.pose.position.x - leader_origin_x_;
+    const auto leader_dy = latest_leader_odom_.pose.pose.position.y - leader_origin_y_;
+    const auto odom_frame_yaw_delta = normalize_angle(follower_origin_yaw_ - leader_origin_yaw_);
+    double leader_dx_aligned = 0.0;
+    double leader_dy_aligned = 0.0;
+    rotated_offset(
+      odom_frame_yaw_delta, leader_dx, leader_dy, leader_dx_aligned, leader_dy_aligned);
+    aligned.pose.pose.position.x =
+      follower_origin_x_ + initial_offset_world_x_ + leader_dx_aligned;
+    aligned.pose.pose.position.y =
+      follower_origin_y_ + initial_offset_world_y_ + leader_dy_aligned;
 
     aligned_leader_odom_pub_->publish(aligned);
   }
