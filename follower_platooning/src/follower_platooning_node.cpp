@@ -59,6 +59,15 @@ double normalize_angle(double angle)
   }
   return angle;
 }
+
+void rotated_offset(
+  double yaw, double offset_x, double offset_y, double & world_x, double & world_y)
+{
+  const auto cos_yaw = std::cos(yaw);
+  const auto sin_yaw = std::sin(yaw);
+  world_x = cos_yaw * offset_x - sin_yaw * offset_y;
+  world_y = sin_yaw * offset_x + cos_yaw * offset_y;
+}
 }  // namespace
 
 class FollowerPlatooningNode : public rclcpp::Node
@@ -69,10 +78,10 @@ public:
   {
     platooning_mode_ = declare_parameter<std::string>("platooning_mode", "vision");
 
-    target_distance_ = declare_parameter<double>("target_distance", 0.45);
-    min_distance_ = declare_parameter<double>("min_distance", 0.15);
-    max_distance_ = declare_parameter<double>("max_distance", 0.30);
-    emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.12);
+    target_distance_ = declare_parameter<double>("target_distance", 0.30);
+    min_distance_ = declare_parameter<double>("min_distance", 0.25);
+    max_distance_ = declare_parameter<double>("max_distance", 0.40);
+    emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.15);
 
     kp_distance_ = declare_parameter<double>("kp_distance", 0.35);
     kp_yaw_ = declare_parameter<double>("kp_yaw", 0.80);
@@ -112,10 +121,16 @@ public:
     distance_deadband_ = declare_parameter<double>("distance_deadband", 0.03);
     odom_heading_deadband_ = declare_parameter<double>("odom_heading_deadband", 0.06);
     odom_linear_heading_gate_ = declare_parameter<double>("odom_linear_heading_gate", 0.35);
+    far_catchup_use_max_speed_ = declare_parameter<bool>("far_catchup_use_max_speed", true);
+    far_catchup_heading_gate_ = declare_parameter<double>("far_catchup_heading_gate", 0.90);
     cmd_angular_deadband_ = declare_parameter<double>("cmd_angular_deadband", 0.04);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
-    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.30);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
+    leader_imu_offset_x_ = declare_parameter<double>("leader_imu_offset_x", 0.0);
+    leader_imu_offset_y_ = declare_parameter<double>("leader_imu_offset_y", 0.0);
+    follower_imu_offset_x_ = declare_parameter<double>("follower_imu_offset_x", 0.0);
+    follower_imu_offset_y_ = declare_parameter<double>("follower_imu_offset_y", 0.0);
 
     const auto target_visible_topic =
       declare_parameter<std::string>("target_visible_topic", "/follower/target_visible");
@@ -240,6 +255,7 @@ private:
   {
     leader_x_ = msg->pose.pose.position.x;
     leader_y_ = msg->pose.pose.position.y;
+    leader_yaw_ = yaw_from_quaternion(msg->pose.pose.orientation);
     have_leader_odom_ = true;
     last_leader_odom_time_ = now();
   }
@@ -378,14 +394,36 @@ private:
       initialize_odom_offset();
     }
 
-    double dx = leader_x_ - follower_x_;
-    double dy = leader_y_ - follower_y_;
+    double leader_base_x = leader_x_;
+    double leader_base_y = leader_y_;
+    double follower_base_x = follower_x_;
+    double follower_base_y = follower_y_;
     if (use_initial_odom_offset_) {
-      dx = initial_leader_offset_world_x_ +
-        (leader_x_ - leader_origin_x_) - (follower_x_ - follower_origin_x_);
-      dy = initial_leader_offset_world_y_ +
-        (leader_y_ - leader_origin_y_) - (follower_y_ - follower_origin_y_);
+      leader_base_x =
+        follower_origin_x_ + initial_leader_offset_world_x_ + (leader_x_ - leader_origin_x_);
+      leader_base_y =
+        follower_origin_y_ + initial_leader_offset_world_y_ + (leader_y_ - leader_origin_y_);
+      follower_base_x = follower_x_;
+      follower_base_y = follower_y_;
     }
+
+    double leader_imu_offset_world_x = 0.0;
+    double leader_imu_offset_world_y = 0.0;
+    double follower_imu_offset_world_x = 0.0;
+    double follower_imu_offset_world_y = 0.0;
+    rotated_offset(
+      leader_yaw_, leader_imu_offset_x_, leader_imu_offset_y_,
+      leader_imu_offset_world_x, leader_imu_offset_world_y);
+    rotated_offset(
+      follower_yaw_, follower_imu_offset_x_, follower_imu_offset_y_,
+      follower_imu_offset_world_x, follower_imu_offset_world_y);
+
+    const auto leader_imu_x = leader_base_x + leader_imu_offset_world_x;
+    const auto leader_imu_y = leader_base_y + leader_imu_offset_world_y;
+    const auto follower_imu_x = follower_base_x + follower_imu_offset_world_x;
+    const auto follower_imu_y = follower_base_y + follower_imu_offset_world_y;
+    const auto dx = leader_imu_x - follower_imu_x;
+    const auto dy = leader_imu_y - follower_imu_y;
     const auto measured_distance = std::hypot(dx, dy);
     if (!std::isfinite(measured_distance) || measured_distance <= 0.0) {
       status = "INVALID_ODOM_DISTANCE";
@@ -424,8 +462,9 @@ private:
       std::abs(leader_angular) <= std::abs(leader_stopped_angular_threshold_));
     const auto at_or_inside_min_distance = measured_distance <= min_distance_;
     const auto too_close_for_spacing = measured_distance < min_distance_;
+    const auto far_for_catchup = measured_distance > max_distance_;
     const auto within_hold_band =
-      measured_distance >= min_distance_ && measured_distance <= max_distance_;
+      std::abs(last_distance_error_) <= distance_deadband_;
     const auto holding_stopped_leader =
       hold_when_leader_stopped_ && leader_stopped && within_hold_band;
 
@@ -433,9 +472,11 @@ private:
     auto distance_linear_x = 0.0;
     if (too_close_for_spacing) {
       distance_linear_x = kp_distance_ * (measured_distance - min_distance_);
-    } else if (holding_stopped_leader || (hold_when_leader_stopped_ && leader_stopped)) {
+    } else if (holding_stopped_leader) {
       distance_linear_x = 0.0;
-    } else if (measured_distance > max_distance_) {
+    } else if (far_for_catchup && far_catchup_use_max_speed_) {
+      distance_linear_x = max_linear_speed_;
+    } else if (far_for_catchup) {
       distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
     } else if (std::abs(last_distance_error_) > distance_deadband_) {
       distance_linear_x = kp_distance_ * last_distance_error_;
@@ -479,7 +520,9 @@ private:
       linear_x = 0.0;
     }
     const auto reversing_for_spacing = linear_x < 0.0 && too_close_for_spacing;
-    if (abs_heading_error > odom_linear_heading_gate_ && !reversing_for_spacing) {
+    const auto active_heading_gate =
+      far_for_catchup ? far_catchup_heading_gate_ : odom_linear_heading_gate_;
+    if (abs_heading_error > active_heading_gate && !reversing_for_spacing) {
       linear_x = 0.0;
     }
 
@@ -515,6 +558,7 @@ private:
                   << " ff_x=" << leader_feedforward_x
                   << " leader_stopped=" << leader_stopped
                   << " hold_band=" << within_hold_band
+                  << " catchup=" << far_for_catchup
                   << " too_close=" << too_close_for_spacing
                   << " cmd_x=" << cmd.linear.x
                   << " cmd_z=" << cmd.angular.z;
@@ -575,17 +619,30 @@ private:
     follower_origin_x_ = follower_x_;
     follower_origin_y_ = follower_y_;
 
-    const auto cos_yaw = std::cos(follower_yaw_);
-    const auto sin_yaw = std::sin(follower_yaw_);
+    double initial_imu_offset_world_x = 0.0;
+    double initial_imu_offset_world_y = 0.0;
+    double leader_imu_offset_world_x = 0.0;
+    double leader_imu_offset_world_y = 0.0;
+    double follower_imu_offset_world_x = 0.0;
+    double follower_imu_offset_world_y = 0.0;
+    rotated_offset(
+      follower_yaw_, initial_leader_offset_x_, initial_leader_offset_y_,
+      initial_imu_offset_world_x, initial_imu_offset_world_y);
+    rotated_offset(
+      leader_yaw_, leader_imu_offset_x_, leader_imu_offset_y_,
+      leader_imu_offset_world_x, leader_imu_offset_world_y);
+    rotated_offset(
+      follower_yaw_, follower_imu_offset_x_, follower_imu_offset_y_,
+      follower_imu_offset_world_x, follower_imu_offset_world_y);
     initial_leader_offset_world_x_ =
-      cos_yaw * initial_leader_offset_x_ - sin_yaw * initial_leader_offset_y_;
+      initial_imu_offset_world_x + follower_imu_offset_world_x - leader_imu_offset_world_x;
     initial_leader_offset_world_y_ =
-      sin_yaw * initial_leader_offset_x_ + cos_yaw * initial_leader_offset_y_;
+      initial_imu_offset_world_y + follower_imu_offset_world_y - leader_imu_offset_world_y;
 
     odom_offset_initialized_ = true;
     RCLCPP_INFO(
       get_logger(),
-      "Initial odom offset enabled: leader starts at follower-frame offset x=%.3f y=%.3f m",
+      "Initial odom offset enabled: leader IMU starts at follower-frame offset x=%.3f y=%.3f m",
       initial_leader_offset_x_, initial_leader_offset_y_);
   }
 
@@ -680,10 +737,16 @@ private:
   double distance_deadband_;
   double odom_heading_deadband_;
   double odom_linear_heading_gate_;
+  bool far_catchup_use_max_speed_;
+  double far_catchup_heading_gate_;
   double cmd_angular_deadband_;
   bool use_initial_odom_offset_;
   double initial_leader_offset_x_;
   double initial_leader_offset_y_;
+  double leader_imu_offset_x_;
+  double leader_imu_offset_y_;
+  double follower_imu_offset_x_;
+  double follower_imu_offset_y_;
 
   bool target_visible_{false};
   bool have_target_visible_{false};
@@ -701,6 +764,7 @@ private:
   geometry_msgs::msg::Twist latest_leader_cmd_;
   double leader_x_{0.0};
   double leader_y_{0.0};
+  double leader_yaw_{0.0};
   double follower_x_{0.0};
   double follower_y_{0.0};
   double follower_yaw_{0.0};

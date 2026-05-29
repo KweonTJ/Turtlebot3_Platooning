@@ -60,8 +60,8 @@ public:
     heartbeat_timeout_ = declare_parameter<double>("heartbeat_timeout", 1.0);
     cmd_vel_timeout_ = declare_parameter<double>("cmd_vel_timeout", 0.5);
     distance_timeout_ = declare_parameter<double>("distance_timeout", 0.5);
-    min_distance_ = declare_parameter<double>("min_distance", 0.35);
-    emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.20);
+    min_distance_ = declare_parameter<double>("min_distance", 0.25);
+    emergency_stop_distance_ = declare_parameter<double>("emergency_stop_distance", 0.15);
 
     allow_reverse_ = declare_parameter<bool>("allow_reverse", false);
     allow_untracked_reverse_or_turn_ =

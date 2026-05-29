@@ -2,16 +2,18 @@ follower_platooning:
   ros__parameters:
     platooning_mode: "odom"
 
-    target_distance: 0.45
-    min_distance: 0.35
-    max_distance: 0.55
-    emergency_stop_distance: 0.20
+    # Distance control uses the horizontal IMU-to-IMU gap.
+    # The current platooning xacro has imu_link at base_link + (0, 0, 0.020).
+    target_distance: 0.30
+    min_distance: 0.25
+    max_distance: 0.40
+    emergency_stop_distance: 0.15
 
-    kp_distance: 0.70
+    kp_distance: 0.95
     kp_yaw: 0.45
 
-    max_linear_speed: 0.10
-    max_angular_speed: 0.22
+    max_linear_speed: 0.18
+    max_angular_speed: 0.35
 
     marker_lost_timeout: 0.5
     odom_timeout: 1.0
@@ -29,7 +31,9 @@ follower_platooning:
     mirror_leader_reverse_turn: true
     use_leader_linear_feedforward: true
     hold_when_leader_stopped: true
-    leader_cmd_linear_gain: 1.0
+    leader_cmd_linear_gain: 1.15
+    # Mirror the leader's angular command with the same ROS yaw sign.
+    # Odom heading correction still uses kp_yaw below.
     leader_cmd_angular_gain: 1.0
     leader_stopped_linear_threshold: 0.015
     leader_stopped_angular_threshold: 0.04
@@ -40,10 +44,16 @@ follower_platooning:
     distance_deadband: 0.03
     odom_heading_deadband: 0.12
     odom_linear_heading_gate: 0.35
+    far_catchup_use_max_speed: true
+    far_catchup_heading_gate: 0.90
     cmd_angular_deadband: 0.04
     use_initial_odom_offset: true
-    initial_leader_offset_x: 0.45
+    initial_leader_offset_x: 0.30
     initial_leader_offset_y: 0.0
+    leader_imu_offset_x: 0.0
+    leader_imu_offset_y: 0.0
+    follower_imu_offset_x: 0.0
+    follower_imu_offset_y: 0.0
 
     target_visible_topic: "/follower/target_visible"
     target_offset_x_topic: "/follower/target_offset_x"
@@ -62,8 +72,12 @@ follower_platooning:
 
 leader_odom_aligner:
   ros__parameters:
-    initial_leader_offset_x: 0.45
+    initial_leader_offset_x: 0.30
     initial_leader_offset_y: 0.0
+    leader_imu_offset_x: 0.0
+    leader_imu_offset_y: 0.0
+    follower_imu_offset_x: 0.0
+    follower_imu_offset_y: 0.0
     leader_odom_topic: "/leader/odom"
     follower_odom_topic: "/odom"
     aligned_leader_odom_topic: "/leader/odom_aligned"

@@ -50,6 +50,15 @@ geometry_msgs::msg::Quaternion quaternion_from_yaw(double yaw)
   q.w = std::cos(yaw * 0.5);
   return q;
 }
+
+void rotated_offset(
+  double yaw, double offset_x, double offset_y, double & world_x, double & world_y)
+{
+  const auto cos_yaw = std::cos(yaw);
+  const auto sin_yaw = std::sin(yaw);
+  world_x = cos_yaw * offset_x - sin_yaw * offset_y;
+  world_y = sin_yaw * offset_x + cos_yaw * offset_y;
+}
 }  // namespace
 
 class LeaderOdomAlignerNode : public rclcpp::Node
@@ -58,8 +67,12 @@ public:
   LeaderOdomAlignerNode()
   : Node("leader_odom_aligner")
   {
-    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.45);
+    initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.30);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
+    leader_imu_offset_x_ = declare_parameter<double>("leader_imu_offset_x", 0.0);
+    leader_imu_offset_y_ = declare_parameter<double>("leader_imu_offset_y", 0.0);
+    follower_imu_offset_x_ = declare_parameter<double>("follower_imu_offset_x", 0.0);
+    follower_imu_offset_y_ = declare_parameter<double>("follower_imu_offset_y", 0.0);
 
     const auto leader_odom_topic =
       declare_parameter<std::string>("leader_odom_topic", "/leader/odom");
@@ -98,17 +111,30 @@ private:
     follower_origin_y_ = latest_follower_odom_.pose.pose.position.y;
     follower_origin_yaw_ = yaw_from_quaternion(latest_follower_odom_.pose.pose.orientation);
 
-    const auto cos_yaw = std::cos(follower_origin_yaw_);
-    const auto sin_yaw = std::sin(follower_origin_yaw_);
+    double initial_imu_offset_world_x = 0.0;
+    double initial_imu_offset_world_y = 0.0;
+    double leader_imu_offset_world_x = 0.0;
+    double leader_imu_offset_world_y = 0.0;
+    double follower_imu_offset_world_x = 0.0;
+    double follower_imu_offset_world_y = 0.0;
+    rotated_offset(
+      follower_origin_yaw_, initial_leader_offset_x_, initial_leader_offset_y_,
+      initial_imu_offset_world_x, initial_imu_offset_world_y);
+    rotated_offset(
+      leader_origin_yaw_, leader_imu_offset_x_, leader_imu_offset_y_,
+      leader_imu_offset_world_x, leader_imu_offset_world_y);
+    rotated_offset(
+      follower_origin_yaw_, follower_imu_offset_x_, follower_imu_offset_y_,
+      follower_imu_offset_world_x, follower_imu_offset_world_y);
     initial_offset_world_x_ =
-      cos_yaw * initial_leader_offset_x_ - sin_yaw * initial_leader_offset_y_;
+      initial_imu_offset_world_x + follower_imu_offset_world_x - leader_imu_offset_world_x;
     initial_offset_world_y_ =
-      sin_yaw * initial_leader_offset_x_ + cos_yaw * initial_leader_offset_y_;
+      initial_imu_offset_world_y + follower_imu_offset_world_y - leader_imu_offset_world_y;
 
     initialized_ = true;
     RCLCPP_INFO(
       get_logger(),
-      "Leader odom aligned to follower odom: initial leader offset x=%.3f y=%.3f m",
+      "Leader odom aligned to follower odom: initial leader IMU offset x=%.3f y=%.3f m",
       initial_leader_offset_x_, initial_leader_offset_y_);
   }
 
@@ -138,8 +164,12 @@ private:
     aligned_leader_odom_pub_->publish(aligned);
   }
 
-  double initial_leader_offset_x_{0.45};
+  double initial_leader_offset_x_{0.30};
   double initial_leader_offset_y_{0.0};
+  double leader_imu_offset_x_{0.0};
+  double leader_imu_offset_y_{0.0};
+  double follower_imu_offset_x_{0.0};
+  double follower_imu_offset_y_{0.0};
   bool have_leader_odom_{false};
   bool have_follower_odom_{false};
   bool initialized_{false};
