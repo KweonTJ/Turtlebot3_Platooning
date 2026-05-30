@@ -48,7 +48,11 @@ follower_platooning:
     far_catchup_heading_gate: 0.90
     far_catchup_angular_feedforward_scale: 0.35
     cmd_angular_deadband: 0.02
-    use_initial_odom_offset: true
+    # /leader/odom_aligned is already transformed into the follower odom frame
+    # by leader_odom_aligner below. Keep this disabled here to avoid applying
+    # the 0.30 m initial leader offset twice, which makes the controller think
+    # the follower is already at the target gap and publish zero velocity.
+    use_initial_odom_offset: false
     initial_leader_offset_x: 0.30
     initial_leader_offset_y: 0.0
     leader_imu_offset_x: 0.0
