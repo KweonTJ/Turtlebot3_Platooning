@@ -313,7 +313,7 @@ def generate_launch_description():
                 name="follower_platooning",
                 output="screen",
                 condition=use_platooning_with_safety,
-                parameters=[platooning_params],
+                parameters=[platooning_params, {"use_initial_odom_offset": False}],
             ),
             Node(
                 package="follower_platooning",
@@ -321,7 +321,13 @@ def generate_launch_description():
                 name="follower_platooning",
                 output="screen",
                 condition=use_platooning_direct,
-                parameters=[platooning_params, {"cmd_vel_raw_topic": "/cmd_vel"}],
+                parameters=[
+                    platooning_params,
+                    {
+                        "cmd_vel_raw_topic": "/cmd_vel",
+                        "use_initial_odom_offset": False,
+                    },
+                ],
             ),
             Node(
                 package="follower_safety",
