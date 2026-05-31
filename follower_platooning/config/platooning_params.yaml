@@ -13,11 +13,14 @@ follower_platooning:
     # Odom 추종은 리더를 향해 회전하는 chase 방식이 아니라,
     # 리더 yaw와 평행을 유지하면서 lateral 오차만 부드럽게 줄인다.
     kp_yaw: 0.45
-    kp_lateral: 0.55
+    kp_lateral: 0.35
+    # 실제 팔로워가 오른쪽으로 튀는 현상을 막기 위해 lateral 보정 방향을
+    # 반전한다. 반대 방향으로 튀면 이 값만 1.0으로 되돌린다.
+    lateral_control_sign: -1.0
     ki_yaw: 0.0
     kd_yaw: 0.04
     ki_lateral: 0.0
-    kd_lateral: 0.08
+    kd_lateral: 0.0
     yaw_integral_limit: 0.30
     lateral_integral_limit: 0.20
 
@@ -60,7 +63,7 @@ follower_platooning:
     far_catchup_heading_gate: 0.90
     far_catchup_angular_feedforward_scale: 0.35
     cmd_angular_deadband: 0.02
-    angular_slew_rate: 0.60
+    angular_slew_rate: 0.35
     # /leader/odom_aligned is already transformed into the follower odom frame
     # by leader_odom_aligner below. Keep this disabled here to avoid applying
     # the 0.30 m initial leader offset twice, which makes the controller think
