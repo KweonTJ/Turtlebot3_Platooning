@@ -86,6 +86,12 @@ public:
     kp_distance_ = declare_parameter<double>("kp_distance", 0.35);
     kp_yaw_ = declare_parameter<double>("kp_yaw", 0.80);
     kp_lateral_ = declare_parameter<double>("kp_lateral", 0.60);
+    ki_yaw_ = declare_parameter<double>("ki_yaw", 0.0);
+    kd_yaw_ = declare_parameter<double>("kd_yaw", 0.04);
+    ki_lateral_ = declare_parameter<double>("ki_lateral", 0.0);
+    kd_lateral_ = declare_parameter<double>("kd_lateral", 0.08);
+    yaw_integral_limit_ = declare_parameter<double>("yaw_integral_limit", 0.30);
+    lateral_integral_limit_ = declare_parameter<double>("lateral_integral_limit", 0.20);
 
     max_linear_speed_ = declare_parameter<double>("max_linear_speed", 0.05);
     max_angular_speed_ = declare_parameter<double>("max_angular_speed", 0.25);
@@ -320,14 +326,17 @@ private:
 
     if (!have_follower_enable_) {
       status = "WAITING_ENABLE";
+      resetParallelPid();
       return zero_twist();
     }
     if (!follower_enable_) {
       status = "DISABLED";
+      resetParallelPid();
       return zero_twist();
     }
     if (!have_platoon_mode_ || !platoon_mode_allows_distance_control()) {
       status = "WAITING_ENABLE";
+      resetParallelPid();
       return zero_twist();
     }
     if (
@@ -393,6 +402,7 @@ private:
   {
     if (!have_leader_odom_ || !have_follower_odom_) {
       status = "ODOM_TIMEOUT";
+      resetParallelPid();
       return zero_twist();
     }
 
@@ -400,6 +410,7 @@ private:
     const auto follower_age = (current_time - last_follower_odom_time_).seconds();
     if (follower_age > odom_timeout_) {
       status = "ODOM_TIMEOUT";
+      resetParallelPid();
       return zero_twist();
     }
     const auto using_last_leader_pose = leader_age > odom_timeout_;
@@ -408,6 +419,7 @@ private:
       (!search_last_leader_pose_ || leader_age > leader_search_timeout_))
     {
       status = "ODOM_TIMEOUT";
+      resetParallelPid();
       return zero_twist();
     }
 
@@ -448,6 +460,7 @@ private:
     const auto measured_distance = std::hypot(dx, dy);
     if (!std::isfinite(measured_distance) || measured_distance <= 0.0) {
       status = "INVALID_ODOM_DISTANCE";
+      resetParallelPid();
       return zero_twist();
     }
     const auto cos_follower_yaw = std::cos(follower_yaw_);
@@ -457,6 +470,7 @@ private:
     const auto yaw_error = normalize_angle(leader_yaw_ - follower_yaw_);
     if (!std::isfinite(forward_gap) || forward_gap <= 0.0) {
       status = "INVALID_ODOM_FORWARD_GAP";
+      resetParallelPid();
       return zero_twist();
     }
 
@@ -464,10 +478,12 @@ private:
     last_measured_distance_ = forward_gap;
     if (measured_distance <= emergency_stop_distance_ || forward_gap <= emergency_stop_distance_) {
       status = "TOO_CLOSE_STOP";
+      resetParallelPid();
       return zero_twist();
     }
     if (!enable_reverse_ && forward_gap <= min_distance_) {
       status = "TOO_CLOSE_STOP";
+      resetParallelPid();
       return zero_twist();
     }
     if (
@@ -475,6 +491,7 @@ private:
       std::abs(last_distance_error_) <= leader_search_stop_tolerance_)
     {
       status = "ODOM_SEARCH_HOLD";
+      resetParallelPid();
       return zero_twist();
     }
 
@@ -567,14 +584,32 @@ private:
       -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
+    double yaw_pid_z = 0.0;
+    double lateral_pid_z = 0.0;
     if (!holding_stopped_leader && !reversing_for_spacing) {
-      if (std::abs(yaw_error) > odom_heading_deadband_) {
-        cmd.angular.z += kp_yaw_ * yaw_error;
-      }
-      cmd.angular.z += kp_lateral_ * lateral_error;
+      yaw_pid_z = updatePid(
+        yaw_error,
+        odom_heading_deadband_,
+        kp_yaw_,
+        ki_yaw_,
+        kd_yaw_,
+        yaw_integral_limit_,
+        yaw_pid_,
+        current_time);
+      lateral_pid_z = updatePid(
+        lateral_error,
+        0.0,
+        kp_lateral_,
+        ki_lateral_,
+        kd_lateral_,
+        lateral_integral_limit_,
+        lateral_pid_,
+        current_time);
+      cmd.angular.z += yaw_pid_z + lateral_pid_z;
     }
     if (holding_stopped_leader || reversing_for_spacing) {
       cmd.angular.z = 0.0;
+      resetParallelPid();
     }
     if (std::abs(cmd.angular.z) < cmd_angular_deadband_) {
       cmd.angular.z = 0.0;
@@ -596,6 +631,8 @@ private:
                   << " leader_age=" << leader_age
                   << " yaw_error=" << yaw_error
                   << " lateral=" << lateral_error
+                  << " yaw_pid=" << yaw_pid_z
+                  << " lateral_pid=" << lateral_pid_z
                   << " dist_x=" << distance_linear_x
                   << " ff_x=" << leader_feedforward_x
                   << " ff_z=" << leader_feedforward_z
