@@ -27,6 +27,12 @@ follower_platooning:
   use_initial_odom_offset: false
 ```
 
+코드에서도 같은 조건을 방어한다. `leader_odom_topic`에 `odom_aligned`가 포함되어 있으면, 설치본이나 런치 인자 실수로 `use_initial_odom_offset`이 `true`로 들어와도 노드가 시작할 때 자동으로 `false`로 낮춘다. 정상 실행 로그에는 다음처럼 실제 적용값이 찍혀야 한다.
+
+```text
+Follower platooning started: ... leader_odom=/leader/odom_aligned use_initial_odom_offset=false ...
+```
+
 이 값이 `true`이면 0.30 m 오프셋이 두 번 적용된다. 그러면 실제로는 리더가 멀어져도 컨트롤러가 목표 거리 근처라고 판단해서 `cmd_x=0`을 발행할 수 있다. 이때 팔로워는 리더 토픽을 받고 있어도 움직이지 않는다.
 
 ## 런타임 확인

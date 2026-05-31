@@ -26,6 +26,7 @@ follower_safety:
     max_angular_speed: 0.45
 
     cmd_vel_raw_topic: "/follower/cmd_vel_raw"
+    teleop_cmd_vel_topic: "/follower/teleop_cmd_vel"
     target_visible_topic: "/follower/target_visible"
     target_distance_topic: "/follower/target_distance"
     heartbeat_topic: "/leader/heartbeat"

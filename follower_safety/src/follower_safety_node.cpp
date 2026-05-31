@@ -76,6 +76,8 @@ public:
 
     const auto cmd_vel_raw_topic =
       declare_parameter<std::string>("cmd_vel_raw_topic", "/follower/cmd_vel_raw");
+    const auto teleop_cmd_vel_topic =
+      declare_parameter<std::string>("teleop_cmd_vel_topic", "/follower/teleop_cmd_vel");
     const auto target_visible_topic =
       declare_parameter<std::string>("target_visible_topic", "/follower/target_visible");
     const auto target_distance_topic =
@@ -95,6 +97,9 @@ public:
     cmd_vel_raw_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       cmd_vel_raw_topic, rclcpp::QoS(10),
       std::bind(&FollowerSafetyNode::cmd_vel_raw_callback, this, std::placeholders::_1));
+    teleop_cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      teleop_cmd_vel_topic, rclcpp::QoS(10),
+      std::bind(&FollowerSafetyNode::teleop_cmd_vel_callback, this, std::placeholders::_1));
     target_visible_sub_ = create_subscription<std_msgs::msg::Bool>(
       target_visible_topic, rclcpp::QoS(10),
       std::bind(&FollowerSafetyNode::target_visible_callback, this, std::placeholders::_1));
@@ -122,6 +127,13 @@ private:
     latest_cmd_ = *msg;
     have_cmd_ = true;
     last_cmd_time_ = now();
+  }
+
+  void teleop_cmd_vel_callback(const geometry_msgs::msg::Twist::ConstSharedPtr msg)
+  {
+    latest_teleop_cmd_ = *msg;
+    have_teleop_cmd_ = true;
+    last_teleop_cmd_time_ = now();
   }
 
   void target_visible_callback(const std_msgs::msg::Bool::ConstSharedPtr msg)
@@ -188,6 +200,13 @@ private:
       state = "FRONT_OBSTACLE";
       return zero_twist();
     }
+    const bool teleop_active = teleop_cmd_active(current_time);
+    if (teleop_active) {
+      auto filtered = clamp_command(latest_teleop_cmd_);
+      state = (std::abs(filtered.linear.x) < 1e-6 && std::abs(filtered.angular.z) < 1e-6) ?
+        "TELEOP_STOPPED" : "TELEOP_SAFE";
+      return filtered;
+    }
     if (heartbeat_required_ && heartbeat_timed_out(current_time)) {
       if (!allow_fresh_cmd_without_heartbeat_ || cmd_timed_out(current_time)) {
         state = "HEARTBEAT_TIMEOUT";
@@ -207,16 +226,7 @@ private:
       return zero_twist();
     }
 
-    auto filtered = latest_cmd_;
-    filtered.linear.y = 0.0;
-    filtered.linear.z = 0.0;
-    filtered.angular.x = 0.0;
-    filtered.angular.y = 0.0;
-
-    const auto min_linear_speed = allow_reverse_ ? -max_linear_speed_ : 0.0;
-    filtered.linear.x = clamp(filtered.linear.x, min_linear_speed, max_linear_speed_);
-    filtered.angular.z = clamp(filtered.angular.z, -max_angular_speed_, max_angular_speed_);
-
+    auto filtered = clamp_command(latest_cmd_);
     if (!allow_reverse_ && filtered.linear.x < 0.0) {
       filtered.linear.x = 0.0;
     }
@@ -242,6 +252,20 @@ private:
     } else {
       state = "SAFE";
     }
+    return filtered;
+  }
+
+  geometry_msgs::msg::Twist clamp_command(const geometry_msgs::msg::Twist & command) const
+  {
+    auto filtered = command;
+    filtered.linear.y = 0.0;
+    filtered.linear.z = 0.0;
+    filtered.angular.x = 0.0;
+    filtered.angular.y = 0.0;
+
+    const auto min_linear_speed = allow_reverse_ ? -max_linear_speed_ : 0.0;
+    filtered.linear.x = clamp(filtered.linear.x, min_linear_speed, max_linear_speed_);
+    filtered.angular.z = clamp(filtered.angular.z, -max_angular_speed_, max_angular_speed_);
     return filtered;
   }
 
@@ -277,6 +301,14 @@ private:
     return (current_time - last_cmd_time_).seconds() > cmd_vel_timeout_;
   }
 
+  bool teleop_cmd_active(const rclcpp::Time & current_time) const
+  {
+    if (!have_teleop_cmd_) {
+      return false;
+    }
+    return (current_time - last_teleop_cmd_time_).seconds() <= cmd_vel_timeout_;
+  }
+
   bool distance_timed_out(const rclcpp::Time & current_time) const
   {
     if (!have_target_distance_) {
@@ -307,7 +339,9 @@ private:
   double max_angular_speed_;
 
   geometry_msgs::msg::Twist latest_cmd_;
+  geometry_msgs::msg::Twist latest_teleop_cmd_;
   bool have_cmd_{false};
+  bool have_teleop_cmd_{false};
   bool target_visible_{false};
   bool have_target_visible_{false};
   double target_distance_{-1.0};
@@ -316,10 +350,12 @@ private:
   bool front_obstacle_{false};
 
   rclcpp::Time last_cmd_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_teleop_cmd_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_heartbeat_time_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_raw_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr teleop_cmd_vel_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr target_visible_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_distance_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heartbeat_sub_;

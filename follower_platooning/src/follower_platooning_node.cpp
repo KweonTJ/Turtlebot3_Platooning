@@ -154,6 +154,14 @@ public:
     const auto follower_odom_topic =
       declare_parameter<std::string>("follower_odom_topic", "/odom");
 
+    if (use_initial_odom_offset_ && leader_odom_topic.find("odom_aligned") != std::string::npos) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Disabling use_initial_odom_offset because leader_odom_topic is already aligned: %s",
+        leader_odom_topic.c_str());
+      use_initial_odom_offset_ = false;
+    }
+
     const auto cmd_vel_raw_topic =
       declare_parameter<std::string>("cmd_vel_raw_topic", "/follower/cmd_vel_raw");
     const auto status_topic =
@@ -206,6 +214,13 @@ public:
 
     control_timer_ = create_wall_timer(
       50ms, std::bind(&FollowerPlatooningNode::control_timer_callback, this));
+
+    RCLCPP_INFO(
+      get_logger(),
+      "Follower platooning started: mode=%s target_distance=%.3f m leader_odom=%s "
+      "use_initial_odom_offset=%s cmd_vel_raw=%s",
+      platooning_mode_.c_str(), target_distance_, leader_odom_topic.c_str(),
+      use_initial_odom_offset_ ? "true" : "false", cmd_vel_raw_topic.c_str());
   }
 
 private:
