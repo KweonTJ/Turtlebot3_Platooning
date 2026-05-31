@@ -57,6 +57,25 @@ ros2 topic echo /leader/platoon_mode --once
 
 ## 키보드 텔레옵
 
+기본 `turtlebot3_bringup`만 켠 상태에서는 safety 노드가 없으므로 표준 `/cmd_vel`을 그대로 사용한다. 이 경우에는 리맵을 넣지 않는다.
+
+```bash
+cd ~/Turtlebot3_Platooning
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export TURTLEBOT3_MODEL=waffle_pi
+ros2 run turtlebot3_teleop teleop_keyboard
+```
+
+기본 브링업 확인:
+
+```bash
+ros2 param get /turtlebot3_node enable_stamped_cmd_vel
+ros2 topic info -v /cmd_vel
+```
+
+Humble 실제 로봇에서는 `enable_stamped_cmd_vel`이 `false`이고 `/cmd_vel` 타입이 `geometry_msgs/msg/Twist`여야 한다. 현재 패키지는 `ROS_DISTRO` 환경변수가 비어 있어도 Humble 기본값을 사용하도록 보강되어 있다.
+
 팔로워 런치가 켜진 상태에서는 `follower_safety_node`가 최종 `/cmd_vel`을 발행한다. 표준 `turtlebot3_teleop`을 그대로 `/cmd_vel`에 붙이면 safety 출력과 충돌하므로, 수동 텔레옵 입력 토픽으로 리맵한다.
 
 ```bash

@@ -144,7 +144,7 @@ def main():
         settings = termios.tcgetattr(sys.stdin)
 
     rclpy.init()
-    ROS_DISTRO = os.environ.get('ROS_DISTRO')
+    ROS_DISTRO = os.environ.get('ROS_DISTRO', 'humble')
     qos = QoSProfile(depth=10)
     node = rclpy.create_node('teleop_keyboard')
     if ROS_DISTRO == 'humble':

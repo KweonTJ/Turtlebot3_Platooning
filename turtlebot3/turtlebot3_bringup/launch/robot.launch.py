@@ -31,7 +31,7 @@ from launch_ros.actions import PushRosNamespace
 
 def generate_launch_description():
     TURTLEBOT3_MODEL = os.environ['TURTLEBOT3_MODEL']
-    ROS_DISTRO = os.environ.get('ROS_DISTRO')
+    ROS_DISTRO = os.environ.get('ROS_DISTRO', 'humble')
     LDS_MODEL = os.environ['LDS_MODEL']
     LDS_LAUNCH_FILE = '/hlds_laser.launch.py'
 
