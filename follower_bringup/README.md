@@ -111,3 +111,23 @@ ros2 topic echo /cmd_vel --once
 ```
 
 키 입력 중 `/follower/safety_state`가 `TELEOP_SAFE`로 나오면 safety를 통해 수동 명령이 최종 `/cmd_vel`로 전달되고 있는 상태다.
+
+## 실제 런치 토픽 충돌 기준
+
+기본 `follower_system.launch.py`에서는 `start_safety:=true`이므로 명령 경로는 하나로 고정된다.
+
+```text
+follower_platooning_node -> /follower/cmd_vel_raw
+follower_safety_node     -> /cmd_vel
+```
+
+`start_safety:=false`로 실행할 때만 `follower_platooning_node`가 직접 `/cmd_vel`을 발행한다. 두 경로가 동시에 켜지면 `/cmd_vel` publisher가 중복되어 팔로워가 튀는 것처럼 보일 수 있으므로 실제 주행에서는 기본 safety 경로를 사용한다.
+
+확인 명령:
+
+```bash
+ros2 topic info -v /cmd_vel
+ros2 topic info -v /follower/cmd_vel_raw
+ros2 topic echo /follower/status --once
+ros2 topic echo /follower/safety_state --once
+```
