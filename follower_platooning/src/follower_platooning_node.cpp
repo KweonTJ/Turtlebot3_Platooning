@@ -85,6 +85,7 @@ public:
 
     kp_distance_ = declare_parameter<double>("kp_distance", 0.35);
     kp_yaw_ = declare_parameter<double>("kp_yaw", 0.80);
+    kp_lateral_ = declare_parameter<double>("kp_lateral", 0.60);
 
     max_linear_speed_ = declare_parameter<double>("max_linear_speed", 0.05);
     max_angular_speed_ = declare_parameter<double>("max_angular_speed", 0.25);
@@ -106,6 +107,8 @@ public:
     mirror_leader_reverse_turn_ = declare_parameter<bool>("mirror_leader_reverse_turn", true);
     use_leader_linear_feedforward_ =
       declare_parameter<bool>("use_leader_linear_feedforward", false);
+    use_leader_angular_feedforward_ =
+      declare_parameter<bool>("use_leader_angular_feedforward", false);
     hold_when_leader_stopped_ = declare_parameter<bool>("hold_when_leader_stopped", true);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
@@ -126,6 +129,7 @@ public:
     far_catchup_angular_feedforward_scale_ =
       declare_parameter<double>("far_catchup_angular_feedforward_scale", 0.35);
     cmd_angular_deadband_ = declare_parameter<double>("cmd_angular_deadband", 0.04);
+    angular_slew_rate_ = declare_parameter<double>("angular_slew_rate", 0.60);
     use_initial_odom_offset_ = declare_parameter<bool>("use_initial_odom_offset", true);
     initial_leader_offset_x_ = declare_parameter<double>("initial_leader_offset_x", 0.30);
     initial_leader_offset_y_ = declare_parameter<double>("initial_leader_offset_y", 0.0);
@@ -446,14 +450,23 @@ private:
       status = "INVALID_ODOM_DISTANCE";
       return zero_twist();
     }
+    const auto cos_follower_yaw = std::cos(follower_yaw_);
+    const auto sin_follower_yaw = std::sin(follower_yaw_);
+    const auto forward_gap = cos_follower_yaw * dx + sin_follower_yaw * dy;
+    const auto lateral_error = -sin_follower_yaw * dx + cos_follower_yaw * dy;
+    const auto yaw_error = normalize_angle(leader_yaw_ - follower_yaw_);
+    if (!std::isfinite(forward_gap) || forward_gap <= 0.0) {
+      status = "INVALID_ODOM_FORWARD_GAP";
+      return zero_twist();
+    }
 
-    last_distance_error_ = measured_distance - target_distance_;
-    last_measured_distance_ = measured_distance;
-    if (measured_distance <= emergency_stop_distance_) {
+    last_distance_error_ = forward_gap - target_distance_;
+    last_measured_distance_ = forward_gap;
+    if (measured_distance <= emergency_stop_distance_ || forward_gap <= emergency_stop_distance_) {
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
-    if (!enable_reverse_ && measured_distance <= min_distance_) {
+    if (!enable_reverse_ && forward_gap <= min_distance_) {
       status = "TOO_CLOSE_STOP";
       return zero_twist();
     }
@@ -465,9 +478,7 @@ private:
       return zero_twist();
     }
 
-    const auto bearing_to_leader = std::atan2(dy, dx);
-    const auto heading_error = normalize_angle(bearing_to_leader - follower_yaw_);
-    const auto abs_heading_error = std::abs(heading_error);
+    const auto abs_heading_error = std::abs(yaw_error);
     const auto leader_cmd_fresh =
       have_leader_cmd_ &&
       (current_time - last_leader_cmd_time_).seconds() <= leader_cmd_timeout_;
@@ -477,9 +488,9 @@ private:
       !leader_cmd_fresh ||
       (std::abs(leader_linear) <= std::abs(leader_stopped_linear_threshold_) &&
       std::abs(leader_angular) <= std::abs(leader_stopped_angular_threshold_));
-    const auto at_or_inside_min_distance = measured_distance <= min_distance_;
-    const auto too_close_for_spacing = measured_distance < min_distance_;
-    const auto far_for_catchup = measured_distance > max_distance_;
+    const auto at_or_inside_min_distance = forward_gap <= min_distance_;
+    const auto too_close_for_spacing = forward_gap < min_distance_;
+    const auto far_for_catchup = forward_gap > max_distance_;
     const auto within_hold_band =
       std::abs(last_distance_error_) <= distance_deadband_;
     const auto holding_stopped_leader =
@@ -488,13 +499,13 @@ private:
     geometry_msgs::msg::Twist cmd;
     auto distance_linear_x = 0.0;
     if (too_close_for_spacing) {
-      distance_linear_x = kp_distance_ * (measured_distance - min_distance_);
+      distance_linear_x = kp_distance_ * (forward_gap - min_distance_);
     } else if (holding_stopped_leader) {
       distance_linear_x = 0.0;
     } else if (far_for_catchup && far_catchup_use_max_speed_) {
       distance_linear_x = max_linear_speed_;
     } else if (far_for_catchup) {
-      distance_linear_x = kp_distance_ * (measured_distance - max_distance_);
+      distance_linear_x = kp_distance_ * (forward_gap - max_distance_);
     } else if (std::abs(last_distance_error_) > distance_deadband_) {
       distance_linear_x = kp_distance_ * last_distance_error_;
     }
@@ -527,7 +538,10 @@ private:
         leader_feedforward_x = leader_linear * leader_cmd_linear_gain_;
         linear_x += leader_feedforward_x;
       }
-      if (leader_forward || allow_reverse_command || allow_turn_command) {
+      if (
+        use_leader_angular_feedforward_ &&
+        (leader_forward || allow_reverse_command || allow_turn_command))
+      {
         const auto angular_gain = far_for_catchup ?
           leader_cmd_angular_gain_ * far_catchup_angular_feedforward_scale_ :
           leader_cmd_angular_gain_;
@@ -553,8 +567,11 @@ private:
       -max_linear_speed_ : 0.0;
     cmd.linear.x = clamp(linear_x, min_linear_speed, max_linear_speed_);
 
-    if (!holding_stopped_leader && !reversing_for_spacing && abs_heading_error > odom_heading_deadband_) {
-      cmd.angular.z += kp_yaw_ * heading_error;
+    if (!holding_stopped_leader && !reversing_for_spacing) {
+      if (std::abs(yaw_error) > odom_heading_deadband_) {
+        cmd.angular.z += kp_yaw_ * yaw_error;
+      }
+      cmd.angular.z += kp_lateral_ * lateral_error;
     }
     if (holding_stopped_leader || reversing_for_spacing) {
       cmd.angular.z = 0.0;
@@ -563,19 +580,22 @@ private:
       cmd.angular.z = 0.0;
     }
     cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed_, max_angular_speed_);
+    cmd.angular.z = apply_angular_slew_limit(cmd.angular.z, current_time);
 
     const auto status_prefix = using_last_leader_pose ?
       "ODOM_SEARCH_LAST_LEADER" :
       (reversing_for_spacing ? "ODOM_TOO_CLOSE_REVERSE" :
       (at_or_inside_min_distance && std::abs(cmd.linear.x) < 1e-6 ? "ODOM_MIN_DISTANCE_HOLD" :
       (holding_stopped_leader ? "ODOM_HOLD_STOPPED_LEADER" :
-      (measured_distance > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING"))));
+      (forward_gap > max_distance_ ? "ODOM_REACQUIRE" : "ODOM_FOLLOWING"))));
     std::ostringstream status_stream;
     status_stream << status_prefix << " mode=" << platoon_mode_state_
-                  << " distance=" << measured_distance
+                  << " distance=" << forward_gap
+                  << " range=" << measured_distance
                   << " error=" << last_distance_error_
                   << " leader_age=" << leader_age
-                  << " heading=" << heading_error
+                  << " yaw_error=" << yaw_error
+                  << " lateral=" << lateral_error
                   << " dist_x=" << distance_linear_x
                   << " ff_x=" << leader_feedforward_x
                   << " ff_z=" << leader_feedforward_z
