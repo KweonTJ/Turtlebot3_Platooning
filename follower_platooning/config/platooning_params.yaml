@@ -14,6 +14,12 @@ follower_platooning:
     # 리더 yaw와 평행을 유지하면서 lateral 오차만 부드럽게 줄인다.
     kp_yaw: 0.45
     kp_lateral: 0.55
+    ki_yaw: 0.0
+    kd_yaw: 0.04
+    ki_lateral: 0.0
+    kd_lateral: 0.08
+    yaw_integral_limit: 0.30
+    lateral_integral_limit: 0.20
 
     max_linear_speed: 0.22
     max_angular_speed: 0.45
