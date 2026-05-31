@@ -71,3 +71,30 @@ far_catchup_use_max_speed: true
 ```
 
 `target_distance`는 리더 IMU와 팔로워 IMU 사이 목표 거리다. 현재 실제 로봇 기준은 0.30 m다.
+
+## 방향 튐 방지
+
+기존 odom 제어는 팔로워에서 리더까지의 벡터를 `atan2()`로 계산한 뒤, 팔로워가 그 방향을 바라보도록 조향했다. 이 방식은 리더와 팔로워가 약간만 좌우로 어긋나도 팔로워가 리더를 향해 꺾어 들어가므로, 나란히 이동해야 하는 플래투닝에서 방향이 튀는 현상이 생긴다.
+
+현재 제어는 리더-팔로워 벡터를 팔로워 기준 좌표로 변환해서 사용한다.
+
+```text
+forward_gap   = 팔로워 전방축 기준 리더와의 거리
+lateral_error = 팔로워 좌우축 기준 리더와의 치우침
+yaw_error     = 정렬된 리더 yaw - 팔로워 yaw
+```
+
+`forward_gap`은 전진 속도 제어에만 쓰고, `lateral_error`와 `yaw_error`는 각속도 제어에만 쓴다. 따라서 팔로워는 리더를 직접 바라보며 꺾지 않고, 리더와 같은 방향을 유지하면서 옆 오차를 줄인다.
+
+관련 파라미터:
+
+```yaml
+kp_yaw: 0.45
+kp_lateral: 0.55
+use_leader_angular_feedforward: false
+angular_slew_rate: 0.60
+```
+
+`use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다.
+
+`angular_slew_rate`는 `/follower/cmd_vel_raw`의 각속도 변화량 제한이다. 값이 너무 작으면 반응이 느리고, 너무 크면 방향 튐이 다시 커진다.
