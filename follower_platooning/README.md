@@ -55,7 +55,7 @@ ros2 topic echo /leader/platoon_mode --once
 - `/follower/cmd_vel_raw`는 움직이는데 `/cmd_vel`이 0이면 `follower_safety`가 막고 있는 것이다. 이때 `/follower/safety_state`를 본다.
 - `WAITING_ENABLE`이면 `/leader/follower_enable` 또는 `/leader/platoon_mode`가 아직 안 왔거나 비활성 상태다.
 - `ODOM_TIMEOUT`이면 `/leader/odom_aligned` 또는 `/odom`이 없거나 너무 오래된 상태다.
-- `ODOM_HOLD_STOPPED_LEADER`와 `cmd_x=0`이 계속 나오면 리더 속도 토픽 `/leader/cmd_vel`이 0으로 들어오거나 거리 오차가 deadband 안에 있는 상태다.
+- `ODOM_HOLD_STOPPED_LEADER`와 `cmd_x=0`이 계속 나오면 설치본 설정이 오래된 것이다. 실제 주행 설정은 `hold_when_leader_stopped: false`라서 리더 속도 토픽이 0이어도 odom 거리 오차가 있으면 계속 보정한다.
 
 ## 주요 파라미터
 
@@ -84,7 +84,7 @@ lateral_error = 팔로워 좌우축 기준 리더와의 치우침
 yaw_error     = 정렬된 리더 yaw - 팔로워 yaw
 ```
 
-`forward_gap`은 전진 속도 제어에만 쓰고, `lateral_error`와 `yaw_error`는 각속도 제어에만 쓴다. 따라서 팔로워는 리더를 직접 바라보며 꺾지 않고, 리더와 같은 방향을 유지하면서 옆 오차를 줄인다.
+`forward_gap`은 전진 속도 제어에만 쓰고, `lateral_error`와 `yaw_error`는 각속도 제어에만 쓴다. 따라서 팔로워는 리더를 직접 바라보며 꺾지 않고, 리더와 같은 방향을 유지하면서 옆 오차를 줄인다. `FOLLOW`, `STANDBY`, `HANDOFF` 모두 거리 제어 허용 모드이며, 리더 `/leader/cmd_vel` feedforward도 이 세 모드에서 같이 적용된다.
 
 각속도는 PID 형태로 계산한다.
 
@@ -108,8 +108,12 @@ ki_lateral: 0.0
 kd_lateral: 0.0
 use_leader_angular_feedforward: false
 angular_slew_rate: 0.35
+hold_when_leader_stopped: false
+distance_deadband: 0.015
 ```
 
 `use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다.
 
 `angular_slew_rate`는 `/follower/cmd_vel_raw`의 각속도 변화량 제한이다. 값이 너무 작으면 반응이 느리고, 너무 크면 방향 튐이 다시 커진다.
+
+`hold_when_leader_stopped`는 기본 `false`다. 리더 속도 토픽이 늦게 오거나 0으로 들어와도 `/leader/odom_aligned` 거리 오차가 생기면 팔로워가 바로 보정하게 하기 위해서다.
