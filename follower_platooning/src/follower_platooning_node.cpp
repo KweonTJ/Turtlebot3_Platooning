@@ -116,7 +116,7 @@ public:
       declare_parameter<bool>("use_leader_linear_feedforward", false);
     use_leader_angular_feedforward_ =
       declare_parameter<bool>("use_leader_angular_feedforward", false);
-    hold_when_leader_stopped_ = declare_parameter<bool>("hold_when_leader_stopped", true);
+    hold_when_leader_stopped_ = declare_parameter<bool>("hold_when_leader_stopped", false);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
     leader_stopped_linear_threshold_ =
@@ -536,7 +536,7 @@ private:
     bool allow_reverse_command = false;
     double leader_feedforward_x = 0.0;
     double leader_feedforward_z = 0.0;
-    if (platoon_mode_state_ == "FOLLOW" && leader_cmd_fresh) {
+    if (platoon_mode_allows_distance_control() && leader_cmd_fresh) {
       const auto leader_reversing =
         leader_linear < -std::abs(leader_cmd_reverse_threshold_);
       const auto leader_forward =
