@@ -86,11 +86,23 @@ yaw_error     = 정렬된 리더 yaw - 팔로워 yaw
 
 `forward_gap`은 전진 속도 제어에만 쓰고, `lateral_error`와 `yaw_error`는 각속도 제어에만 쓴다. 따라서 팔로워는 리더를 직접 바라보며 꺾지 않고, 리더와 같은 방향을 유지하면서 옆 오차를 줄인다.
 
+각속도는 PID 형태로 계산한다.
+
+```text
+cmd_z = yaw_pid(yaw_error) + lateral_pid(lateral_error)
+```
+
+`yaw_pid`는 리더와 같은 방향을 유지하는 항이고, `lateral_pid`는 리더와 나란한 라인으로 복귀하는 항이다. 실제 로봇에서는 적분항이 누적되면 오히려 방향이 튈 수 있어서 기본값은 `ki=0`으로 두고, 미분항으로 갑작스러운 치우침 변화만 감쇠한다.
+
 관련 파라미터:
 
 ```yaml
 kp_yaw: 0.45
 kp_lateral: 0.55
+ki_yaw: 0.0
+kd_yaw: 0.04
+ki_lateral: 0.0
+kd_lateral: 0.08
 use_leader_angular_feedforward: false
 angular_slew_rate: 0.60
 ```
