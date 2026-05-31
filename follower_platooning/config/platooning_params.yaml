@@ -10,7 +10,10 @@ follower_platooning:
     emergency_stop_distance: 0.15
 
     kp_distance: 0.95
-    kp_yaw: 0.65
+    # Odom 추종은 리더를 향해 회전하는 chase 방식이 아니라,
+    # 리더 yaw와 평행을 유지하면서 lateral 오차만 부드럽게 줄인다.
+    kp_yaw: 0.45
+    kp_lateral: 0.55
 
     max_linear_speed: 0.22
     max_angular_speed: 0.45
@@ -30,6 +33,9 @@ follower_platooning:
     allow_odom_without_heartbeat: true
     mirror_leader_reverse_turn: true
     use_leader_linear_feedforward: true
+    # 직진 추종 중에는 리더 angular feedforward가 순간적인 방향 튐을 만든다.
+    # 제자리 회전/후진 mirror 경로는 아래 mirror_leader_reverse_turn 로직을 유지한다.
+    use_leader_angular_feedforward: false
     hold_when_leader_stopped: true
     leader_cmd_linear_gain: 1.25
     # Mirror the leader's angular command with the same ROS yaw sign.
@@ -48,6 +54,7 @@ follower_platooning:
     far_catchup_heading_gate: 0.90
     far_catchup_angular_feedforward_scale: 0.35
     cmd_angular_deadband: 0.02
+    angular_slew_rate: 0.60
     # /leader/odom_aligned is already transformed into the follower odom frame
     # by leader_odom_aligner below. Keep this disabled here to avoid applying
     # the 0.30 m initial leader offset twice, which makes the controller think
