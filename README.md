@@ -118,13 +118,14 @@ source ~/Desktop/Turtlebot3_Platooning/install/setup.bash
 ros2 launch follower_bringup follower_system.launch.py start_rviz:=false
 ```
 
-현재 기본 실행은 `use_camera:=true`, `start_vision:=false`이다. 카메라 토픽은 띄우되, ArUco 없이 odometry 기반 제어만 실행한다.
+현재 기본 실행은 `use_camera:=false`, `start_vision:=false`, `monitor_video_enabled:=false`이다. 팔로워 USB 카메라를 제거했기 때문에 기본 런치는 카메라 노드와 팔로워 영상 업로드를 켜지 않고, 리더 odometry 기반 거리 제어만 실행한다.
 
-카메라 장치 번호가 `/dev/video0`이 아니면 다음처럼 지정한다.
+팔로워에 USB 카메라를 다시 연결해서 영상 확인이 필요할 때만 다음처럼 명시적으로 켠다.
 
 ```bash
 ros2 launch follower_bringup follower_system.launch.py \
   use_camera:=true \
+  monitor_video_enabled:=true \
   video_device:=/dev/video2 \
   start_rviz:=false
 ```
@@ -238,10 +239,17 @@ ros2 launch follower_bringup follower_system.launch.py start_rviz:=false
 
 ## GitHub 자동 업데이트
 
-팔로워 로봇에는 워크스페이스 루트에 `update_from_github.sh`를 두고 실행한다.
+팔로워 로봇에서는 Git 저장소가 `src/` 자체이므로 `update_from_github.sh`도 `src/` 안에 둔다. 스크립트 내부에서 자동으로 워크스페이스 루트를 `~/Turtlebot3_Platooning`으로 계산한 뒤 `src`를 업데이트하고 빌드한다.
 
 ```bash
 cd ~/Turtlebot3_Platooning
+./src/update_from_github.sh
+```
+
+`src` 안에서 직접 실행해도 같은 방식으로 동작한다.
+
+```bash
+cd ~/Turtlebot3_Platooning/src
 ./update_from_github.sh
 ```
 
@@ -252,6 +260,45 @@ cd ~/Turtlebot3_Platooning
 ```text
 GitHub repo: https://github.com/KweonTJ/Turtlebot3_Platooning.git
 기본 branch: main
+```
+
+## Git 자동 커밋
+
+개발 PC에서 팔로워 패키지를 수정하는 동안 변경사항을 바로 커밋하려면 `src/git_auto.sh`를 실행한다. 이 스크립트는 `src` Git 저장소를 감시하고 파일 변경이 생기면 `git add -A` 후 자동 커밋한다.
+
+```bash
+cd ~/Desktop/Turtlebot3_Platooning/src
+./git_auto.sh
+```
+
+기본 동작은 로컬 커밋까지만 수행한다. GitHub까지 자동 push하려면 명시적으로 `AUTO_PUSH=1`을 붙인다.
+
+```bash
+cd ~/Desktop/Turtlebot3_Platooning/src
+AUTO_PUSH=1 ./git_auto.sh
+```
+
+감시는 `inotifywait`가 있으면 이벤트 기반으로 동작하고, 없으면 5초마다 변경 여부를 확인한다. `.git`, `build`, `install`, `log`, `__pycache__`는 감시 대상에서 제외한다.
+
+매번 쉘을 직접 실행하지 않고 자동으로 켜지게 하려면 user systemd 서비스로 등록한다.
+
+```bash
+cd ~/Desktop/Turtlebot3_Platooning/src
+./git_auto.sh install
+```
+
+이후 로그인 세션에서 자동으로 `git_auto.sh watch`가 실행된다. 상태 확인과 해제는 다음 명령을 사용한다.
+
+```bash
+./git_auto.sh status
+./git_auto.sh uninstall
+```
+
+서비스에서도 GitHub까지 자동 push하려면 설치할 때 `AUTO_PUSH=1`을 명시한다.
+
+```bash
+cd ~/Desktop/Turtlebot3_Platooning/src
+AUTO_PUSH=1 ./git_auto.sh install
 ```
 
 ## 문제 확인

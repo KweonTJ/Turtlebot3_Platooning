@@ -10,6 +10,10 @@ follower_platooning_node -> /follower/cmd_vel_raw -> follower_safety_node -> /cm
 
 `follower_safety_node`는 heartbeat, 거리, 마커, 장애물 조건을 확인한 뒤 명령을 제한한다.
 
+## 코드 구조
+
+플래투닝 명령과 키보드 텔레옵 명령은 같은 `TimedTwistCommand` 구조체로 관리한다. 이 구조체는 마지막 명령, 수신 시각, 수신 여부를 함께 저장하고 timeout/active 판정을 담당한다. 따라서 안전 필터 본문은 heartbeat, 거리, 마커, 장애물 조건만 판단하도록 유지한다.
+
 ## 키보드 텔레옵 경로
 
 팔로워 런치가 실행 중일 때 표준 `turtlebot3_teleop`을 그대로 `/cmd_vel`에 붙이면 `follower_safety_node`의 출력과 충돌한다. 따라서 키보드 텔레옵은 `/follower/teleop_cmd_vel`로 리맵해서 넣는다.

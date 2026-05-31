@@ -38,6 +38,38 @@ geometry_msgs::msg::Twist zero_twist()
 {
   return geometry_msgs::msg::Twist();
 }
+
+bool is_stopped(const geometry_msgs::msg::Twist & command)
+{
+  return std::abs(command.linear.x) < 1e-6 && std::abs(command.angular.z) < 1e-6;
+}
+
+struct TimedTwistCommand
+{
+  geometry_msgs::msg::Twist value;
+  rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
+  bool received{false};
+
+  void update(const geometry_msgs::msg::Twist & command, const rclcpp::Time & current_time)
+  {
+    value = command;
+    stamp = current_time;
+    received = true;
+  }
+
+  bool timed_out(const rclcpp::Time & current_time, const double timeout_s) const
+  {
+    if (!received) {
+      return true;
+    }
+    return (current_time - stamp).seconds() > timeout_s;
+  }
+
+  bool active(const rclcpp::Time & current_time, const double timeout_s) const
+  {
+    return received && (current_time - stamp).seconds() <= timeout_s;
+  }
+};
 }  // namespace
 
 class FollowerSafetyNode : public rclcpp::Node
@@ -124,16 +156,12 @@ public:
 private:
   void cmd_vel_raw_callback(const geometry_msgs::msg::Twist::ConstSharedPtr msg)
   {
-    latest_cmd_ = *msg;
-    have_cmd_ = true;
-    last_cmd_time_ = now();
+    platooning_cmd_.update(*msg, now());
   }
 
   void teleop_cmd_vel_callback(const geometry_msgs::msg::Twist::ConstSharedPtr msg)
   {
-    latest_teleop_cmd_ = *msg;
-    have_teleop_cmd_ = true;
-    last_teleop_cmd_time_ = now();
+    teleop_cmd_.update(*msg, now());
   }
 
   void target_visible_callback(const std_msgs::msg::Bool::ConstSharedPtr msg)
@@ -200,20 +228,20 @@ private:
       state = "FRONT_OBSTACLE";
       return zero_twist();
     }
-    const bool teleop_active = teleop_cmd_active(current_time);
-    if (teleop_active) {
-      auto filtered = clamp_command(latest_teleop_cmd_);
-      state = (std::abs(filtered.linear.x) < 1e-6 && std::abs(filtered.angular.z) < 1e-6) ?
-        "TELEOP_STOPPED" : "TELEOP_SAFE";
+    if (teleop_cmd_.active(current_time, cmd_vel_timeout_)) {
+      auto filtered = clamp_command(teleop_cmd_.value);
+      state = is_stopped(filtered) ? "TELEOP_STOPPED" : "TELEOP_SAFE";
       return filtered;
     }
     if (heartbeat_required_ && heartbeat_timed_out(current_time)) {
-      if (!allow_fresh_cmd_without_heartbeat_ || cmd_timed_out(current_time)) {
+      if (!allow_fresh_cmd_without_heartbeat_ ||
+        platooning_cmd_.timed_out(current_time, cmd_vel_timeout_))
+      {
         state = "HEARTBEAT_TIMEOUT";
         return zero_twist();
       }
     }
-    if (cmd_timed_out(current_time)) {
+    if (platooning_cmd_.timed_out(current_time, cmd_vel_timeout_)) {
       state = "CMD_TIMEOUT";
       return zero_twist();
     }
@@ -226,7 +254,7 @@ private:
       return zero_twist();
     }
 
-    auto filtered = clamp_command(latest_cmd_);
+    auto filtered = clamp_command(platooning_cmd_.value);
     if (!allow_reverse_ && filtered.linear.x < 0.0) {
       filtered.linear.x = 0.0;
     }
@@ -247,7 +275,7 @@ private:
       }
     }
 
-    if (std::abs(filtered.linear.x) < 1e-6 && std::abs(filtered.angular.z) < 1e-6) {
+    if (is_stopped(filtered)) {
       state = "STOPPED";
     } else {
       state = "SAFE";
@@ -278,10 +306,10 @@ private:
       return false;
     }
 
-    const auto reversing = latest_cmd_.linear.x < -std::abs(untracked_reverse_threshold_);
+    const auto reversing = platooning_cmd_.value.linear.x < -std::abs(untracked_reverse_threshold_);
     const auto turning =
-      std::abs(latest_cmd_.angular.z) > std::abs(untracked_turn_threshold_) &&
-      std::abs(latest_cmd_.linear.x) <= std::abs(untracked_turn_linear_deadband_);
+      std::abs(platooning_cmd_.value.angular.z) > std::abs(untracked_turn_threshold_) &&
+      std::abs(platooning_cmd_.value.linear.x) <= std::abs(untracked_turn_linear_deadband_);
     return reversing || turning;
   }
 
@@ -291,22 +319,6 @@ private:
       return true;
     }
     return (current_time - last_heartbeat_time_).seconds() > heartbeat_timeout_;
-  }
-
-  bool cmd_timed_out(const rclcpp::Time & current_time) const
-  {
-    if (!have_cmd_) {
-      return true;
-    }
-    return (current_time - last_cmd_time_).seconds() > cmd_vel_timeout_;
-  }
-
-  bool teleop_cmd_active(const rclcpp::Time & current_time) const
-  {
-    if (!have_teleop_cmd_) {
-      return false;
-    }
-    return (current_time - last_teleop_cmd_time_).seconds() <= cmd_vel_timeout_;
   }
 
   bool distance_timed_out(const rclcpp::Time & current_time) const
@@ -338,10 +350,8 @@ private:
   double max_linear_speed_;
   double max_angular_speed_;
 
-  geometry_msgs::msg::Twist latest_cmd_;
-  geometry_msgs::msg::Twist latest_teleop_cmd_;
-  bool have_cmd_{false};
-  bool have_teleop_cmd_{false};
+  TimedTwistCommand platooning_cmd_;
+  TimedTwistCommand teleop_cmd_;
   bool target_visible_{false};
   bool have_target_visible_{false};
   double target_distance_{-1.0};
@@ -349,8 +359,6 @@ private:
   bool have_heartbeat_{false};
   bool front_obstacle_{false};
 
-  rclcpp::Time last_cmd_time_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time last_teleop_cmd_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_heartbeat_time_{0, 0, RCL_ROS_TIME};
 

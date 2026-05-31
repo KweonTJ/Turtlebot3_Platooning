@@ -18,11 +18,27 @@ ros2 launch follower_bringup follower_system.launch.py
 ```text
 turtlebot3_node
 robot_state_publisher
-follower_camera
 leader_odom_aligner_node
 follower_platooning_node
 follower_safety_node
 robot_status_uploader.py
+```
+
+현재 팔로워 로봇은 USB 카메라를 제거한 상태라서 기본 런치에서는 `follower_camera`를 켜지 않는다. 기본값은 다음과 같다.
+
+```text
+use_camera:=false
+start_vision:=false
+monitor_video_enabled:=false
+```
+
+카메라를 다시 연결해서 팔로워 원본 영상을 모니터에 올려야 할 때만 명시적으로 켠다.
+
+```bash
+ros2 launch follower_bringup follower_system.launch.py \
+  use_camera:=true \
+  monitor_video_enabled:=true \
+  video_device:=/dev/video0
 ```
 
 ## 추종 제어 오프셋

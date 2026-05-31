@@ -197,7 +197,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("use_camera", default_value="true"),
+            DeclareLaunchArgument("use_camera", default_value="false"),
             DeclareLaunchArgument("start_vision", default_value="false"),
             DeclareLaunchArgument("video_device", default_value="/dev/video0"),
             DeclareLaunchArgument("use_debug_image", default_value="true"),
@@ -224,7 +224,7 @@ def generate_launch_description():
                 "monitor_token",
                 default_value=EnvironmentVariable("MONITOR_TOKEN", default_value=""),
             ),
-            DeclareLaunchArgument("monitor_video_enabled", default_value="true"),
+            DeclareLaunchArgument("monitor_video_enabled", default_value="false"),
             DeclareLaunchArgument("monitor_status_period", default_value="0.2"),
             DeclareLaunchArgument("monitor_video_period", default_value="0.25"),
             DeclareLaunchArgument("monitor_jpeg_quality", default_value="65"),
