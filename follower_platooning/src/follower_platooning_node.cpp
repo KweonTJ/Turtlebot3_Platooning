@@ -86,6 +86,7 @@ public:
     kp_distance_ = declare_parameter<double>("kp_distance", 0.35);
     kp_yaw_ = declare_parameter<double>("kp_yaw", 0.80);
     kp_lateral_ = declare_parameter<double>("kp_lateral", 0.60);
+    lateral_control_sign_ = declare_parameter<double>("lateral_control_sign", 1.0);
     ki_yaw_ = declare_parameter<double>("ki_yaw", 0.0);
     kd_yaw_ = declare_parameter<double>("kd_yaw", 0.04);
     ki_lateral_ = declare_parameter<double>("ki_lateral", 0.0);
@@ -596,7 +597,7 @@ private:
         yaw_integral_limit_,
         yaw_pid_,
         current_time);
-      lateral_pid_z = updatePid(
+      lateral_pid_z = lateral_control_sign_ * updatePid(
         lateral_error,
         0.0,
         kp_lateral_,
@@ -631,6 +632,7 @@ private:
                   << " leader_age=" << leader_age
                   << " yaw_error=" << yaw_error
                   << " lateral=" << lateral_error
+                  << " lateral_sign=" << lateral_control_sign_
                   << " yaw_pid=" << yaw_pid_z
                   << " lateral_pid=" << lateral_pid_z
                   << " dist_x=" << distance_linear_x
@@ -870,6 +872,7 @@ private:
   double kp_distance_;
   double kp_yaw_;
   double kp_lateral_;
+  double lateral_control_sign_;
   double ki_yaw_;
   double kd_yaw_;
   double ki_lateral_;
