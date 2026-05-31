@@ -716,6 +716,62 @@ private:
     return limited;
   }
 
+  struct PidState
+  {
+    bool initialized{false};
+    double integral{0.0};
+    double last_error{0.0};
+    rclcpp::Time last_stamp{0, 0, RCL_ROS_TIME};
+  };
+
+  double updatePid(
+    double error,
+    double deadband,
+    double kp,
+    double ki,
+    double kd,
+    double integral_limit,
+    PidState & state,
+    const rclcpp::Time & current_time)
+  {
+    if (std::abs(error) <= std::abs(deadband)) {
+      state.integral = 0.0;
+      state.last_error = error;
+      state.last_stamp = current_time;
+      state.initialized = true;
+      return 0.0;
+    }
+
+    double dt = 0.0;
+    if (state.initialized) {
+      dt = clamp((current_time - state.last_stamp).seconds(), 0.0, 0.25);
+    }
+
+    if (ki != 0.0 && dt > 0.0) {
+      state.integral += error * dt;
+      state.integral = clamp(
+        state.integral,
+        -std::abs(integral_limit),
+        std::abs(integral_limit));
+    }
+
+    double derivative = 0.0;
+    if (kd != 0.0 && state.initialized && dt > 1e-6) {
+      derivative = (error - state.last_error) / dt;
+    }
+
+    state.last_error = error;
+    state.last_stamp = current_time;
+    state.initialized = true;
+    return kp * error + ki * state.integral + kd * derivative;
+  }
+
+  void resetParallelPid()
+  {
+    yaw_pid_ = PidState();
+    lateral_pid_ = PidState();
+  }
+
   void initialize_odom_offset()
   {
     leader_origin_x_ = leader_x_;
@@ -814,6 +870,12 @@ private:
   double kp_distance_;
   double kp_yaw_;
   double kp_lateral_;
+  double ki_yaw_;
+  double kd_yaw_;
+  double ki_lateral_;
+  double kd_lateral_;
+  double yaw_integral_limit_;
+  double lateral_integral_limit_;
   double max_linear_speed_;
   double max_angular_speed_;
   double marker_lost_timeout_;
@@ -887,6 +949,8 @@ private:
   double initial_leader_offset_world_y_{0.0};
   bool have_last_cmd_{false};
   double last_cmd_angular_z_{0.0};
+  PidState yaw_pid_;
+  PidState lateral_pid_;
 
   rclcpp::Time last_target_visible_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
