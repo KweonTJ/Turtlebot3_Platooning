@@ -45,7 +45,9 @@ follower_platooning:
     # 직진 추종 중에는 리더 angular feedforward가 순간적인 방향 튐을 만든다.
     # 제자리 회전/후진 mirror 경로는 아래 mirror_leader_reverse_turn 로직을 유지한다.
     use_leader_angular_feedforward: false
-    hold_when_leader_stopped: true
+    # 리더 cmd_vel이 0이거나 잠깐 stale이어도 odom 거리 오차가 있으면 계속 보정한다.
+    # true이면 deadband 안에서 팔로워가 멈춰 리더 출발을 늦게 따라가는 현상이 커진다.
+    hold_when_leader_stopped: false
     leader_cmd_linear_gain: 1.25
     # Mirror the leader's angular command with the same ROS yaw sign.
     # Odom heading correction still uses kp_yaw below.
@@ -56,7 +58,7 @@ follower_platooning:
     leader_cmd_turn_threshold: 0.12
     leader_cmd_turn_linear_deadband: 0.02
     leader_reverse_max_distance_error: 0.08
-    distance_deadband: 0.03
+    distance_deadband: 0.015
     odom_heading_deadband: 0.06
     odom_linear_heading_gate: 0.35
     far_catchup_use_max_speed: true
