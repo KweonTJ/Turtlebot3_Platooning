@@ -5,7 +5,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRANCH="${BRANCH:-$(git -C "${REPO_DIR}" branch --show-current)}"
 POLL_INTERVAL_S="${POLL_INTERVAL_S:-5}"
 DEBOUNCE_S="${DEBOUNCE_S:-3}"
-AUTO_PUSH="${AUTO_PUSH:-0}"
+AUTO_PUSH="${AUTO_PUSH:-1}"
 COMMIT_PREFIX="${COMMIT_PREFIX:-auto: update}"
 SERVICE_NAME="${SERVICE_NAME:-turtlebot3-platooning-git-auto.service}"
 SERVICE_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
@@ -30,7 +30,8 @@ Commands:
   status     Show the user systemd service status.
 
 Environment:
-  AUTO_PUSH=1          Push commits to origin/${BRANCH} after each auto commit.
+  AUTO_PUSH=1          Push commits to origin/${BRANCH} after each auto commit. Default: 1.
+  AUTO_PUSH=0          Keep auto commits local without pushing.
   POLL_INTERVAL_S=5    Poll interval when inotifywait is unavailable.
   DEBOUNCE_S=3         Delay after a filesystem event before committing.
 EOF

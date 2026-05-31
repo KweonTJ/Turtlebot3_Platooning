@@ -262,20 +262,20 @@ GitHub repo: https://github.com/KweonTJ/Turtlebot3_Platooning.git
 기본 branch: main
 ```
 
-## Git 자동 커밋
+## Git 자동 커밋 및 push
 
-개발 PC에서 팔로워 패키지를 수정하는 동안 변경사항을 바로 커밋하려면 `src/git_auto.sh`를 실행한다. 이 스크립트는 `src` Git 저장소를 감시하고 파일 변경이 생기면 `git add -A` 후 자동 커밋한다.
+개발 PC에서 팔로워 패키지를 수정하는 동안 변경사항을 바로 GitHub까지 올리려면 `src/git_auto.sh`를 실행한다. 이 스크립트는 `src` Git 저장소를 감시하고 파일 변경이 생기면 `git add -A`, 자동 커밋, `origin/main` push까지 수행한다.
 
 ```bash
 cd ~/Desktop/Turtlebot3_Platooning/src
 ./git_auto.sh
 ```
 
-기본 동작은 로컬 커밋까지만 수행한다. GitHub까지 자동 push하려면 명시적으로 `AUTO_PUSH=1`을 붙인다.
+기본 동작은 자동 push까지 포함한다. 로컬 커밋까지만 하고 싶으면 명시적으로 `AUTO_PUSH=0`을 붙인다.
 
 ```bash
 cd ~/Desktop/Turtlebot3_Platooning/src
-AUTO_PUSH=1 ./git_auto.sh
+AUTO_PUSH=0 ./git_auto.sh
 ```
 
 감시는 `inotifywait`가 있으면 이벤트 기반으로 동작하고, 없으면 5초마다 변경 여부를 확인한다. `.git`, `build`, `install`, `log`, `__pycache__`는 감시 대상에서 제외한다.
@@ -294,11 +294,11 @@ cd ~/Desktop/Turtlebot3_Platooning/src
 ./git_auto.sh uninstall
 ```
 
-서비스에서도 GitHub까지 자동 push하려면 설치할 때 `AUTO_PUSH=1`을 명시한다.
+서비스도 기본적으로 GitHub까지 자동 push한다. 로컬 커밋 전용 서비스로 설치하려면 `AUTO_PUSH=0`을 명시한다.
 
 ```bash
 cd ~/Desktop/Turtlebot3_Platooning/src
-AUTO_PUSH=1 ./git_auto.sh install
+AUTO_PUSH=0 ./git_auto.sh install
 ```
 
 ## 문제 확인
