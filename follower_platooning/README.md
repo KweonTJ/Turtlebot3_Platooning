@@ -89,22 +89,25 @@ yaw_error     = 정렬된 리더 yaw - 팔로워 yaw
 각속도는 PID 형태로 계산한다.
 
 ```text
-cmd_z = yaw_pid(yaw_error) + lateral_pid(lateral_error)
+cmd_z = yaw_pid(yaw_error) + lateral_control_sign * lateral_pid(lateral_error)
 ```
 
 `yaw_pid`는 리더와 같은 방향을 유지하는 항이고, `lateral_pid`는 리더와 나란한 라인으로 복귀하는 항이다. 실제 로봇에서는 적분항이 누적되면 오히려 방향이 튈 수 있어서 기본값은 `ki=0`으로 두고, 미분항으로 갑작스러운 치우침 변화만 감쇠한다.
+
+실제 팔로워에서 오른쪽으로 튀는 증상이 반복되어 `lateral_control_sign` 기본값은 `-1.0`으로 둔다. 이 값은 좌우 보정 방향만 바꾸며, 거리 제어나 리더 yaw 정렬은 그대로 유지한다. 만약 반대로 왼쪽으로 튀면 이 값만 `1.0`으로 되돌려 확인한다.
 
 관련 파라미터:
 
 ```yaml
 kp_yaw: 0.45
-kp_lateral: 0.55
+kp_lateral: 0.35
+lateral_control_sign: -1.0
 ki_yaw: 0.0
 kd_yaw: 0.04
 ki_lateral: 0.0
-kd_lateral: 0.08
+kd_lateral: 0.0
 use_leader_angular_feedforward: false
-angular_slew_rate: 0.60
+angular_slew_rate: 0.35
 ```
 
 `use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다.
