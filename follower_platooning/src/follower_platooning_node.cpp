@@ -655,6 +655,30 @@ private:
     return true;
   }
 
+  double apply_angular_slew_limit(double target_angular_z, const rclcpp::Time & current_time)
+  {
+    if (angular_slew_rate_ <= 0.0) {
+      last_cmd_angular_z_ = target_angular_z;
+      last_cmd_time_ = current_time;
+      have_last_cmd_ = true;
+      return target_angular_z;
+    }
+    if (!have_last_cmd_) {
+      last_cmd_angular_z_ = target_angular_z;
+      last_cmd_time_ = current_time;
+      have_last_cmd_ = true;
+      return target_angular_z;
+    }
+
+    const auto dt = clamp((current_time - last_cmd_time_).seconds(), 0.0, 0.25);
+    const auto max_delta = std::abs(angular_slew_rate_) * dt;
+    const auto limited = last_cmd_angular_z_ +
+      clamp(target_angular_z - last_cmd_angular_z_, -max_delta, max_delta);
+    last_cmd_angular_z_ = limited;
+    last_cmd_time_ = current_time;
+    return limited;
+  }
+
   void initialize_odom_offset()
   {
     leader_origin_x_ = leader_x_;
@@ -752,6 +776,7 @@ private:
   double emergency_stop_distance_;
   double kp_distance_;
   double kp_yaw_;
+  double kp_lateral_;
   double max_linear_speed_;
   double max_angular_speed_;
   double marker_lost_timeout_;
@@ -768,6 +793,7 @@ private:
   bool allow_odom_without_heartbeat_;
   bool mirror_leader_reverse_turn_;
   bool use_leader_linear_feedforward_;
+  bool use_leader_angular_feedforward_;
   bool hold_when_leader_stopped_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
@@ -784,6 +810,7 @@ private:
   double far_catchup_heading_gate_;
   double far_catchup_angular_feedforward_scale_;
   double cmd_angular_deadband_;
+  double angular_slew_rate_;
   bool use_initial_odom_offset_;
   double initial_leader_offset_x_;
   double initial_leader_offset_y_;
@@ -821,6 +848,8 @@ private:
   double follower_origin_y_{0.0};
   double initial_leader_offset_world_x_{0.0};
   double initial_leader_offset_world_y_{0.0};
+  bool have_last_cmd_{false};
+  double last_cmd_angular_z_{0.0};
 
   rclcpp::Time last_target_visible_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_target_distance_time_{0, 0, RCL_ROS_TIME};
@@ -828,6 +857,7 @@ private:
   rclcpp::Time last_leader_cmd_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_leader_odom_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_follower_odom_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_cmd_time_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr target_visible_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_offset_x_sub_;
