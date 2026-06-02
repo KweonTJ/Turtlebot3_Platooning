@@ -32,6 +32,47 @@ start_vision:=false
 monitor_video_enabled:=false
 ```
 
+## 리더 키보드 텔레옵 추종
+
+리더가 pick/place 작업 런치가 아니라 키보드 텔레옵으로만 움직일 때는 팔로워에서 전용 별칭 런치를 사용한다.
+
+```bash
+cd ~/Turtlebot3_Platooning
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch follower_bringup teleop_follow.launch.py
+```
+
+이 런치는 `follower_system.launch.py`를 아래 값으로 감싼다.
+
+```text
+use_camera:=false
+start_vision:=false
+monitor_video_enabled:=false
+start_base_driver:=true
+start_platooning:=true
+start_safety:=true
+```
+
+즉 USB 카메라 없이 기본 터틀봇 드라이버, odom aligner, platooning, safety만 켠다. 리더 쪽에서는 `leader_platooning_beacon leader_teleop_platooning.launch.py`가 `/leader/odom`, `/leader/cmd_vel`, `/leader/follower_enable`, `/leader/platoon_mode`, `/leader/heartbeat`를 팔로워 도메인으로 넘겨야 한다.
+
+팔로워에서 먼저 확인할 토픽:
+
+```bash
+ros2 topic echo /leader/follower_enable --once
+ros2 topic echo /leader/platoon_mode --once
+ros2 topic echo /leader/heartbeat --once
+ros2 topic echo /leader/odom --once
+ros2 topic echo /leader/cmd_vel --once
+ros2 topic echo /leader/odom_aligned --once
+ros2 topic echo /follower/status --once
+ros2 topic echo /follower/cmd_vel_raw --once
+ros2 topic echo /follower/safety_state --once
+ros2 topic echo /cmd_vel --once
+```
+
+`/leader/cmd_vel`이 들어오는데 `/follower/cmd_vel_raw`가 0이면 `follower_platooning`의 거리 판단이 멈춘 것이다. `/follower/cmd_vel_raw`는 움직이는데 `/cmd_vel`이 0이면 `follower_safety`가 막고 있는 것이다.
+
 카메라를 다시 연결해서 팔로워 원본 영상을 모니터에 올려야 할 때만 명시적으로 켠다.
 
 ```bash
