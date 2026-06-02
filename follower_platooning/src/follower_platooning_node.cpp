@@ -119,6 +119,7 @@ public:
     hold_when_leader_stopped_ = declare_parameter<bool>("hold_when_leader_stopped", false);
     leader_cmd_linear_gain_ = declare_parameter<double>("leader_cmd_linear_gain", 1.0);
     leader_cmd_angular_gain_ = declare_parameter<double>("leader_cmd_angular_gain", 1.0);
+    leader_cmd_angular_sign_ = declare_parameter<double>("leader_cmd_angular_sign", 1.0);
     leader_stopped_linear_threshold_ =
       declare_parameter<double>("leader_stopped_linear_threshold", 0.015);
     leader_stopped_angular_threshold_ =
@@ -137,6 +138,7 @@ public:
       declare_parameter<double>("leader_odom_filter_max_step_m", 0.025);
     leader_odom_filter_max_yaw_step_rad_ =
       declare_parameter<double>("leader_odom_filter_max_yaw_step_rad", 0.06);
+    leader_cmd_angular_sign_ = leader_cmd_angular_sign_ < 0.0 ? -1.0 : 1.0;
     far_catchup_use_max_speed_ = declare_parameter<bool>("far_catchup_use_max_speed", true);
     far_catchup_heading_gate_ = declare_parameter<double>("far_catchup_heading_gate", 0.90);
     far_catchup_angular_feedforward_scale_ =
@@ -600,7 +602,7 @@ private:
         const auto angular_gain = far_for_catchup ?
           leader_cmd_angular_gain_ * far_catchup_angular_feedforward_scale_ :
           leader_cmd_angular_gain_;
-        leader_feedforward_z = leader_angular * angular_gain;
+        leader_feedforward_z = leader_cmd_angular_sign_ * leader_angular * angular_gain;
         cmd.angular.z += leader_feedforward_z;
       }
     }
@@ -718,7 +720,7 @@ private:
         min_linear_speed,
         max_linear_speed_);
       cmd.angular.z = clamp(
-        leader_angular * leader_cmd_angular_gain_,
+        leader_cmd_angular_sign_ * leader_angular * leader_cmd_angular_gain_,
         -max_angular_speed_,
         max_angular_speed_);
       status = "MIRROR_REVERSE";
@@ -726,7 +728,7 @@ private:
     }
 
     cmd.angular.z = clamp(
-      leader_angular * leader_cmd_angular_gain_,
+      leader_cmd_angular_sign_ * leader_angular * leader_cmd_angular_gain_,
       -max_angular_speed_,
       max_angular_speed_);
     status = "MIRROR_TURN";
