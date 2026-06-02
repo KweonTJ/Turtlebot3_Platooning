@@ -61,6 +61,12 @@ follower_platooning:
     distance_deadband: 0.015
     odom_heading_deadband: 0.06
     odom_linear_heading_gate: 0.35
+    # 리더가 매니퓰레이터 액션 중 odom pose를 순간적으로 튀게 만들면
+    # 팔로워가 그 jump를 바로 추종하지 않도록 PID 앞단에서 leader odom을 필터링한다.
+    use_leader_odom_filter: true
+    leader_odom_filter_alpha: 0.35
+    leader_odom_filter_max_step_m: 0.025
+    leader_odom_filter_max_yaw_step_rad: 0.06
     far_catchup_use_max_speed: true
     far_catchup_heading_gate: 0.90
     far_catchup_angular_feedforward_scale: 0.35
