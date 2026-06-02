@@ -110,6 +110,10 @@ use_leader_angular_feedforward: false
 angular_slew_rate: 0.35
 hold_when_leader_stopped: false
 distance_deadband: 0.015
+use_leader_odom_filter: true
+leader_odom_filter_alpha: 0.35
+leader_odom_filter_max_step_m: 0.025
+leader_odom_filter_max_yaw_step_rad: 0.06
 ```
 
 `use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다.
@@ -117,3 +121,33 @@ distance_deadband: 0.015
 `angular_slew_rate`는 `/follower/cmd_vel_raw`의 각속도 변화량 제한이다. 값이 너무 작으면 반응이 느리고, 너무 크면 방향 튐이 다시 커진다.
 
 `hold_when_leader_stopped`는 기본 `false`다. 리더 속도 토픽이 늦게 오거나 0으로 들어와도 `/leader/odom_aligned` 거리 오차가 생기면 팔로워가 바로 보정하게 하기 위해서다.
+
+## 리더 액션 중 odom 튐 방지
+
+리더가 매니퓰레이터 액션을 수행할 때 `/leader/odom_aligned` pose가 순간적으로 튀면, 기존 제어는 그 pose를 곧바로 목표로 사용해서 팔로워도 방향이 튀었다. 현재는 PID 제어 앞단에서 leader odom reference를 필터링한다.
+
+```text
+raw /leader/odom_aligned -> leader odom filter -> distance/yaw/lateral PID -> /follower/cmd_vel_raw
+```
+
+필터는 리더 odom을 완전히 무시하지 않고, 한 업데이트에서 사용할 수 있는 리더 pose 변화량을 제한한다. 따라서 리더가 실제로 계속 이동하면 팔로워가 따라가지만, 액션 수행 중 생기는 순간 pose jump는 여러 제어 주기에 나뉘어 반영된다.
+
+관련 파라미터:
+
+```yaml
+use_leader_odom_filter: true
+leader_odom_filter_alpha: 0.35
+leader_odom_filter_max_step_m: 0.025
+leader_odom_filter_max_yaw_step_rad: 0.06
+```
+
+`leader_odom_filter_alpha`는 raw leader odom을 얼마나 빠르게 따라갈지 정한다. `leader_odom_filter_max_step_m`은 한 odom 업데이트에서 리더 기준점이 이동할 수 있는 최대 거리다. `leader_odom_filter_max_yaw_step_rad`는 한 업데이트에서 허용하는 리더 yaw 변화량이다.
+
+확인할 때는 `/follower/status`에서 다음 항목을 본다.
+
+```text
+leader_filter_error
+leader_filter_yaw_error
+```
+
+이 값이 순간적으로 커지면 리더 odom jump가 필터에 걸린 상태다. 값이 계속 크고 팔로워 반응이 너무 느리면 `leader_odom_filter_alpha`나 `leader_odom_filter_max_step_m`을 조금 올린다. 방향 튐이 다시 생기면 `leader_odom_filter_max_step_m`과 `leader_odom_filter_max_yaw_step_rad`를 낮춘다.
