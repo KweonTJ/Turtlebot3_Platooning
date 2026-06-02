@@ -68,9 +68,13 @@ follower_odom_topic: "/odom"
 use_initial_odom_offset: false
 use_leader_linear_feedforward: true
 far_catchup_use_max_speed: true
+leader_cmd_angular_gain: 0.55
+leader_cmd_angular_sign: -1.0
 ```
 
 `target_distance`는 리더 IMU와 팔로워 IMU 사이 목표 거리다. 현재 실제 로봇 기준은 0.30 m다.
+
+`leader_cmd_angular_sign`은 리더 `/leader/cmd_vel.angular.z`를 팔로워가 미러링할 때의 회전 부호다. 실제 플래투닝에서 리더와 팔로워가 서로 반대 방향으로 회전하는 현상이 확인되어, 현재 실제 팔로워는 `-1.0`을 사용한다. `leader_cmd_angular_gain`은 회전 크기만 조절하고, 회전 방향 보정은 이 sign 값으로만 한다.
 
 ## 방향 튐 방지
 
@@ -107,6 +111,7 @@ kd_yaw: 0.04
 ki_lateral: 0.0
 kd_lateral: 0.0
 use_leader_angular_feedforward: false
+leader_cmd_angular_sign: -1.0
 angular_slew_rate: 0.35
 hold_when_leader_stopped: false
 distance_deadband: 0.015
@@ -116,7 +121,7 @@ leader_odom_filter_max_step_m: 0.025
 leader_odom_filter_max_yaw_step_rad: 0.06
 ```
 
-`use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다.
+`use_leader_angular_feedforward`는 기본 `false`다. 직진 추종 중 `/leader/cmd_vel`의 angular 값을 그대로 더하면 방향 튐이 커질 수 있기 때문이다. 후진이나 제자리 회전 mirror 동작은 기존 `mirror_leader_reverse_turn` 경로를 유지한다. 이 mirror 경로에서도 `leader_cmd_angular_sign`이 적용되므로, 리더가 좌회전할 때 팔로워가 우회전하면 이 값을 확인한다.
 
 `angular_slew_rate`는 `/follower/cmd_vel_raw`의 각속도 변화량 제한이다. 값이 너무 작으면 반응이 느리고, 너무 크면 방향 튐이 다시 커진다.
 
