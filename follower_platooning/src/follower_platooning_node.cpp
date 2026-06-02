@@ -940,6 +940,7 @@ private:
   bool hold_when_leader_stopped_;
   double leader_cmd_linear_gain_;
   double leader_cmd_angular_gain_;
+  double leader_cmd_angular_sign_;
   double leader_stopped_linear_threshold_;
   double leader_stopped_angular_threshold_;
   double leader_cmd_reverse_threshold_;
