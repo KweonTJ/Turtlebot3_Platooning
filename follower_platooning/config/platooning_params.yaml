@@ -49,9 +49,9 @@ follower_platooning:
     # true이면 deadband 안에서 팔로워가 멈춰 리더 출발을 늦게 따라가는 현상이 커진다.
     hold_when_leader_stopped: false
     leader_cmd_linear_gain: 1.25
-    # Real follower hardware rotates opposite to the leader when the bridged
-    # /leader/cmd_vel angular.z is mirrored with the same ROS yaw sign.
-    # Keep the magnitude as gain and correct the hardware/sign convention here.
+    # 실제 팔로워는 브릿지된 /leader/cmd_vel angular.z를 같은 ROS yaw 부호로
+    # 미러링하면 리더와 반대 방향으로 회전했다. gain은 크기만 담당하고,
+    # 하드웨어/좌표계 부호 보정은 이 sign 값으로 분리한다.
     leader_cmd_angular_gain: 0.55
     leader_cmd_angular_sign: -1.0
     leader_stopped_linear_threshold: 0.015
