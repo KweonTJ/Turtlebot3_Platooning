@@ -131,6 +131,12 @@ public:
     distance_deadband_ = declare_parameter<double>("distance_deadband", 0.03);
     odom_heading_deadband_ = declare_parameter<double>("odom_heading_deadband", 0.06);
     odom_linear_heading_gate_ = declare_parameter<double>("odom_linear_heading_gate", 0.35);
+    use_leader_odom_filter_ = declare_parameter<bool>("use_leader_odom_filter", true);
+    leader_odom_filter_alpha_ = declare_parameter<double>("leader_odom_filter_alpha", 0.35);
+    leader_odom_filter_max_step_m_ =
+      declare_parameter<double>("leader_odom_filter_max_step_m", 0.025);
+    leader_odom_filter_max_yaw_step_rad_ =
+      declare_parameter<double>("leader_odom_filter_max_yaw_step_rad", 0.06);
     far_catchup_use_max_speed_ = declare_parameter<bool>("far_catchup_use_max_speed", true);
     far_catchup_heading_gate_ = declare_parameter<double>("far_catchup_heading_gate", 0.90);
     far_catchup_angular_feedforward_scale_ =
@@ -229,9 +235,10 @@ public:
     RCLCPP_INFO(
       get_logger(),
       "Follower platooning started: mode=%s target_distance=%.3f m leader_odom=%s "
-      "use_initial_odom_offset=%s cmd_vel_raw=%s",
+      "use_initial_odom_offset=%s leader_odom_filter=%s cmd_vel_raw=%s",
       platooning_mode_.c_str(), target_distance_, leader_odom_topic.c_str(),
-      use_initial_odom_offset_ ? "true" : "false", cmd_vel_raw_topic.c_str());
+      use_initial_odom_offset_ ? "true" : "false",
+      use_leader_odom_filter_ ? "true" : "false", cmd_vel_raw_topic.c_str());
   }
 
 private:
@@ -281,9 +288,39 @@ private:
 
   void leader_odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
   {
-    leader_x_ = msg->pose.pose.position.x;
-    leader_y_ = msg->pose.pose.position.y;
-    leader_yaw_ = yaw_from_quaternion(msg->pose.pose.orientation);
+    const auto raw_x = msg->pose.pose.position.x;
+    const auto raw_y = msg->pose.pose.position.y;
+    const auto raw_yaw = yaw_from_quaternion(msg->pose.pose.orientation);
+    raw_leader_x_ = raw_x;
+    raw_leader_y_ = raw_y;
+    raw_leader_yaw_ = raw_yaw;
+
+    if (!use_leader_odom_filter_ || !have_leader_odom_filter_) {
+      leader_x_ = raw_x;
+      leader_y_ = raw_y;
+      leader_yaw_ = raw_yaw;
+      filtered_leader_jump_m_ = 0.0;
+      filtered_leader_yaw_jump_rad_ = 0.0;
+      have_leader_odom_filter_ = true;
+    } else {
+      const auto alpha = clamp(leader_odom_filter_alpha_, 0.0, 1.0);
+      const auto target_x = leader_x_ + alpha * (raw_x - leader_x_);
+      const auto target_y = leader_y_ + alpha * (raw_y - leader_y_);
+      const auto target_yaw = leader_yaw_ + alpha * normalize_angle(raw_yaw - leader_yaw_);
+      const auto max_step = std::max(0.0, leader_odom_filter_max_step_m_);
+      const auto max_yaw_step = std::max(0.0, leader_odom_filter_max_yaw_step_rad_);
+      const auto dx = clamp(target_x - leader_x_, -max_step, max_step);
+      const auto dy = clamp(target_y - leader_y_, -max_step, max_step);
+      const auto dyaw = clamp(
+        normalize_angle(target_yaw - leader_yaw_),
+        -max_yaw_step,
+        max_yaw_step);
+      leader_x_ += dx;
+      leader_y_ += dy;
+      leader_yaw_ = normalize_angle(leader_yaw_ + dyaw);
+      filtered_leader_jump_m_ = std::hypot(raw_x - leader_x_, raw_y - leader_y_);
+      filtered_leader_yaw_jump_rad_ = normalize_angle(raw_yaw - leader_yaw_);
+    }
     have_leader_odom_ = true;
     last_leader_odom_time_ = now();
   }
@@ -630,6 +667,8 @@ private:
                   << " range=" << measured_distance
                   << " error=" << last_distance_error_
                   << " leader_age=" << leader_age
+                  << " leader_filter_error=" << filtered_leader_jump_m_
+                  << " leader_filter_yaw_error=" << filtered_leader_yaw_jump_rad_
                   << " yaw_error=" << yaw_error
                   << " lateral=" << lateral_error
                   << " lateral_sign=" << lateral_control_sign_
