@@ -104,6 +104,22 @@ sudo apt install ros-humble-domain-bridge
 
 ## 실행 방법
 
+### 실행 런치 파일 요약
+
+| 실행 목적 | 실행 위치 | 런치 파일 | 비고 |
+| --- | --- | --- | --- |
+| 팔로워 전체 실행 | 팔로워 로봇 | `follower_bringup follower_system.launch.py` | 기본 팔로워 bringup, odom aligner, platooning, safety 실행 |
+| 리더 키보드 텔레옵 추종 | 팔로워 로봇 | `follower_bringup teleop_follow.launch.py` | 카메라 없이 리더 `/leader/odom`, `/leader/cmd_vel` 기반 추종만 실행 |
+| 팔로워 플래투닝 제어만 실행 | 팔로워 로봇 또는 디버그 PC | `follower_platooning follower_platooning.launch.py` | base driver/safety 없이 odom 추종 제어 노드만 확인 |
+| 팔로워 safety 필터만 실행 | 팔로워 로봇 또는 디버그 PC | `follower_safety follower_safety.launch.py` | `/follower/cmd_vel_raw`를 받아 최종 `/cmd_vel` 안전 필터링 |
+| 리더-팔로워 도메인 브릿지 | 리더 또는 호스트 | `platooning_bridge_config bridge.launch.py` | 리더 domain `25`의 `/leader/*` 토픽을 팔로워 domain `73`으로 전달 |
+
+리더가 키보드 텔레옵으로 움직일 때 팔로워에서 사용하는 기본 명령:
+
+```bash
+ros2 launch follower_bringup teleop_follow.launch.py
+```
+
 ### 1. 팔로워 로봇 전체 실행
 
 팔로워 로봇에서는 도메인 `73`으로 실행한다.
