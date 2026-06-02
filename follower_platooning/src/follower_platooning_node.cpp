@@ -947,6 +947,10 @@ private:
   double distance_deadband_;
   double odom_heading_deadband_;
   double odom_linear_heading_gate_;
+  bool use_leader_odom_filter_;
+  double leader_odom_filter_alpha_;
+  double leader_odom_filter_max_step_m_;
+  double leader_odom_filter_max_yaw_step_rad_;
   bool far_catchup_use_max_speed_;
   double far_catchup_heading_gate_;
   double far_catchup_angular_feedforward_scale_;
@@ -974,6 +978,9 @@ private:
   bool have_leader_odom_{false};
   bool have_follower_odom_{false};
   geometry_msgs::msg::Twist latest_leader_cmd_;
+  double raw_leader_x_{0.0};
+  double raw_leader_y_{0.0};
+  double raw_leader_yaw_{0.0};
   double leader_x_{0.0};
   double leader_y_{0.0};
   double leader_yaw_{0.0};
@@ -983,6 +990,9 @@ private:
   double last_distance_error_{0.0};
   double last_measured_distance_{-1.0};
   bool odom_offset_initialized_{false};
+  bool have_leader_odom_filter_{false};
+  double filtered_leader_jump_m_{0.0};
+  double filtered_leader_yaw_jump_rad_{0.0};
   double leader_origin_x_{0.0};
   double leader_origin_y_{0.0};
   double follower_origin_x_{0.0};
