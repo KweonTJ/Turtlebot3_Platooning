@@ -198,6 +198,7 @@ ros2 topic echo /cmd_vel --once
 ```bash
 ros2 topic echo /leader/heartbeat --once
 ros2 topic echo /leader/platoon_mode --once
+ros2 topic echo /leader/task_state --once
 ros2 topic echo /leader/cmd_vel --once
 ros2 topic echo /leader/odom --once
 ros2 topic echo /leader/odom_aligned --once
@@ -210,10 +211,13 @@ ros2 topic echo /leader/odom_aligned --once
 3. `leader_odom_aligner`는 시작 시점의 수동 초기 정렬을 `0.47 m` 리더 오프셋으로
    잡고, 이후 브릿지된 `/leader/odom` 변화량을 팔로워 `/odom` 좌표계의
    `/leader/odom_aligned`로 변환한다.
-4. `follower_platooning`은 `/leader/odom_aligned`와 자신의 `/odom`을 비교해 리더와의
+4. `follower_platooning`은 `/leader/task_state`를 먼저 확인한다. 리더가 `IDLE`이
+   아닌 작업 상태이면 odom PID를 리셋하고 `/follower/cmd_vel_raw=0`을 발행해
+   팔로워를 정지시킨다.
+5. `follower_platooning`은 `/leader/odom_aligned`와 자신의 `/odom`을 비교해 리더와의
    상대 거리를 추정한다.
-5. `follower_platooning`이 목표 거리 `0.47 m`를 기준으로 `/follower/cmd_vel_raw`를 계산한다.
-6. `follower_safety`가 heartbeat, 장애물, 속도 제한을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
+6. `follower_platooning`이 목표 거리 `0.47 m`를 기준으로 `/follower/cmd_vel_raw`를 계산한다.
+7. `follower_safety`가 heartbeat, 장애물, 속도 제한을 확인한 뒤 최종 `/cmd_vel`을 발행한다.
 
 이 odometry 기반 구성은 UWB/공통 위치 추정 없이 실험하기 위한 임시 구성이다.
 리더와 팔로워의 odom 원점이 서로 같다고 가정하지 않으며, 시작 시점의 물리적
