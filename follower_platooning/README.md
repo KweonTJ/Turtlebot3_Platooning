@@ -47,6 +47,7 @@ ros2 topic echo /cmd_vel --once
 ros2 topic echo /leader/odom_aligned --once
 ros2 topic echo /leader/follower_enable --once
 ros2 topic echo /leader/platoon_mode --once
+ros2 topic echo /leader/task_state --once
 ```
 
 해석 기준:
@@ -54,6 +55,7 @@ ros2 topic echo /leader/platoon_mode --once
 - `/follower/status`가 `ODOM_FOLLOWING` 또는 `ODOM_REACQUIRE`이고 `cmd_x>0`이면 추종 제어는 움직이려고 한다.
 - `/follower/cmd_vel_raw`는 움직이는데 `/cmd_vel`이 0이면 `follower_safety`가 막고 있는 것이다. 이때 `/follower/safety_state`를 본다.
 - `WAITING_ENABLE`이면 `/leader/follower_enable` 또는 `/leader/platoon_mode`가 아직 안 왔거나 비활성 상태다.
+- `LEADER_TASK_HOLD task_state=...`이면 리더가 물체 접근/파지/적재 작업 중이라 팔로워가 의도적으로 정지한 상태다. 이때 `/follower/cmd_vel_raw`는 0이어야 한다.
 - `ODOM_TIMEOUT`이면 `/leader/odom_aligned` 또는 `/odom`이 없거나 너무 오래된 상태다.
 - `ODOM_HOLD_STOPPED_LEADER`와 `cmd_x=0`이 계속 나오면 설치본 설정이 오래된 것이다. 실제 주행 설정은 `hold_when_leader_stopped: false`라서 리더 속도 토픽이 0이어도 odom 거리 오차가 있으면 계속 보정한다.
 
@@ -67,6 +69,8 @@ leader_odom_topic: "/leader/odom_aligned"
 follower_odom_topic: "/odom"
 use_initial_odom_offset: false
 use_leader_linear_feedforward: true
+hold_on_leader_task_active: true
+leader_task_idle_states: ["IDLE"]
 far_catchup_use_max_speed: true
 leader_cmd_angular_gain: 0.55
 leader_cmd_angular_sign: -1.0
@@ -75,6 +79,8 @@ leader_cmd_angular_sign: -1.0
 `target_distance`는 리더 IMU와 팔로워 IMU 사이 목표 거리다. 현재 실제 로봇 기준은 0.30 m다.
 
 `leader_cmd_angular_sign`은 리더 `/leader/cmd_vel.angular.z`를 팔로워가 미러링할 때의 회전 부호다. 실제 플래투닝에서 리더와 팔로워가 서로 반대 방향으로 회전하는 현상이 확인되어, 현재 실제 팔로워는 `-1.0`을 사용한다. `leader_cmd_angular_gain`은 회전 크기만 조절하고, 회전 방향 보정은 이 sign 값으로만 한다.
+
+`hold_on_leader_task_active`는 리더 작업 상태 기반 정지 조건이다. `/leader/task_state`가 `leader_task_idle_states`에 없는 값이면 팔로워는 odom PID와 angular slew 상태를 리셋하고 `/follower/cmd_vel_raw=0`을 발행한다. 현재 기본 idle 상태는 `IDLE` 하나다. 따라서 리더가 `MOVING`, `PICKING`, `WAIT_FOLLOWER`, `HANDOFF`처럼 작업 시퀀스 안에 들어가면 팔로워는 리더 odom 흔들림을 따라가지 않고 정지한다.
 
 ## 방향 튐 방지
 
@@ -131,6 +137,8 @@ leader_odom_filter_max_yaw_step_rad: 0.06
 
 리더가 매니퓰레이터 액션을 수행할 때 `/leader/odom_aligned` pose가 순간적으로 튀면, 기존 제어는 그 pose를 곧바로 목표로 사용해서 팔로워도 방향이 튀었다. 현재는 PID 제어 앞단에서 leader odom reference를 필터링한다.
 
+추가로 `/leader/task_state`를 직접 구독해서 리더 작업 중에는 odom 필터보다 앞에서 정지한다. 필터는 리더가 실제로 주행 중일 때의 pose jump를 완화하는 장치이고, 작업 중 정지는 `LEADER_TASK_HOLD` 경로가 담당한다. 이 분리가 없으면 리더가 물체 접근이나 파지를 위해 멈춘 상태에서도 lateral/yaw PID가 남은 오차를 계속 보정해 팔로워가 옆 방향으로 튈 수 있다.
+
 ```text
 raw /leader/odom_aligned -> leader odom filter -> distance/yaw/lateral PID -> /follower/cmd_vel_raw
 ```
@@ -156,3 +164,11 @@ leader_filter_yaw_error
 ```
 
 이 값이 순간적으로 커지면 리더 odom jump가 필터에 걸린 상태다. 값이 계속 크고 팔로워 반응이 너무 느리면 `leader_odom_filter_alpha`나 `leader_odom_filter_max_step_m`을 조금 올린다. 방향 튐이 다시 생기면 `leader_odom_filter_max_step_m`과 `leader_odom_filter_max_yaw_step_rad`를 낮춘다.
+
+작업 중에는 `/follower/status`가 다음처럼 나와야 정상이다.
+
+```text
+LEADER_TASK_HOLD task_state=PICKING
+```
+
+이 상태에서 `/follower/cmd_vel_raw`와 최종 `/cmd_vel`이 0이면 리더 작업 중 팔로워 정지가 정상 적용된 것이다.
