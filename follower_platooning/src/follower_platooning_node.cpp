@@ -18,6 +18,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -106,6 +107,9 @@ public:
     leader_cmd_timeout_ = declare_parameter<double>("leader_cmd_timeout", 0.5);
 
     heartbeat_required_ = declare_parameter<bool>("heartbeat_required", false);
+    hold_on_leader_task_active_ = declare_parameter<bool>("hold_on_leader_task_active", true);
+    leader_task_idle_states_ = declare_parameter<std::vector<std::string>>(
+      "leader_task_idle_states", std::vector<std::string>{"IDLE"});
     enable_reverse_ = declare_parameter<bool>("enable_reverse", false);
     allow_distance_reverse_ = declare_parameter<bool>("allow_distance_reverse", false);
     close_reverse_min_speed_ = declare_parameter<double>("close_reverse_min_speed", 0.03);
@@ -166,6 +170,8 @@ public:
       declare_parameter<std::string>("platoon_mode_topic", "/leader/platoon_mode");
     const auto heartbeat_topic =
       declare_parameter<std::string>("heartbeat_topic", "/leader/heartbeat");
+    const auto leader_task_state_topic =
+      declare_parameter<std::string>("leader_task_state_topic", "/leader/task_state");
     const auto leader_cmd_vel_topic =
       declare_parameter<std::string>("leader_cmd_vel_topic", "/leader/cmd_vel");
     const auto leader_odom_topic =
@@ -218,6 +224,9 @@ public:
     platoon_mode_sub_ = create_subscription<std_msgs::msg::String>(
       platoon_mode_topic, leader_state_qos,
       std::bind(&FollowerPlatooningNode::platoon_mode_callback, this, std::placeholders::_1));
+    leader_task_state_sub_ = create_subscription<std_msgs::msg::String>(
+      leader_task_state_topic, leader_state_qos,
+      std::bind(&FollowerPlatooningNode::leader_task_state_callback, this, std::placeholders::_1));
     heartbeat_sub_ = create_subscription<std_msgs::msg::Bool>(
       heartbeat_topic, heartbeat_qos,
       std::bind(&FollowerPlatooningNode::heartbeat_callback, this, std::placeholders::_1));
@@ -273,6 +282,12 @@ private:
   {
     platoon_mode_state_ = msg->data;
     have_platoon_mode_ = true;
+  }
+
+  void leader_task_state_callback(const std_msgs::msg::String::ConstSharedPtr msg)
+  {
+    leader_task_state_ = msg->data;
+    have_leader_task_state_ = true;
   }
 
   void heartbeat_callback(const std_msgs::msg::Bool::ConstSharedPtr)
@@ -377,6 +392,12 @@ private:
     if (!have_platoon_mode_ || !platoon_mode_allows_distance_control()) {
       status = "WAITING_ENABLE";
       resetParallelPid();
+      return zero_twist();
+    }
+    if (leader_task_hold_active()) {
+      status = "LEADER_TASK_HOLD task_state=" + leader_task_state_;
+      resetParallelPid();
+      resetAngularSlew();
       return zero_twist();
     }
     if (
@@ -815,6 +836,23 @@ private:
     lateral_pid_ = PidState();
   }
 
+  void resetAngularSlew()
+  {
+    have_last_cmd_ = false;
+    last_cmd_angular_z_ = 0.0;
+  }
+
+  bool leader_task_hold_active() const
+  {
+    if (!hold_on_leader_task_active_ || !have_leader_task_state_) {
+      return false;
+    }
+    return std::find(
+      leader_task_idle_states_.begin(),
+      leader_task_idle_states_.end(),
+      leader_task_state_) == leader_task_idle_states_.end();
+  }
+
   void initialize_odom_offset()
   {
     leader_origin_x_ = leader_x_;
@@ -929,6 +967,8 @@ private:
   double heartbeat_timeout_;
   double leader_cmd_timeout_;
   bool heartbeat_required_;
+  bool hold_on_leader_task_active_;
+  std::vector<std::string> leader_task_idle_states_;
   bool enable_reverse_;
   bool allow_distance_reverse_;
   double close_reverse_min_speed_;
@@ -976,6 +1016,8 @@ private:
   bool have_follower_enable_{false};
   std::string platoon_mode_state_;
   bool have_platoon_mode_{false};
+  std::string leader_task_state_;
+  bool have_leader_task_state_{false};
   bool have_heartbeat_{false};
   bool have_leader_cmd_{false};
   bool have_leader_odom_{false};
@@ -1020,6 +1062,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr target_distance_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr follower_enable_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr platoon_mode_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr leader_task_state_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr heartbeat_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr leader_cmd_vel_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr leader_odom_sub_;
