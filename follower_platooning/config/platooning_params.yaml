@@ -34,6 +34,11 @@ follower_platooning:
     heartbeat_timeout: 1.0
     heartbeat_required: false
     leader_cmd_timeout: 1.0
+    # 리더가 물체 접근/파지/적재 작업에 들어가면 팔로워는 odom 오차를 추종하지
+    # 않고 정지한다. 리더 매니퓰레이터 동작 중 odom/yaw가 흔들릴 때 팔로워가
+    # 다른 방향으로 튀는 것을 막기 위한 작업 상태 hold다.
+    hold_on_leader_task_active: true
+    leader_task_idle_states: ["IDLE"]
 
     enable_reverse: true
     allow_distance_reverse: true
@@ -92,6 +97,7 @@ follower_platooning:
 
     follower_enable_topic: "/leader/follower_enable"
     platoon_mode_topic: "/leader/platoon_mode"
+    leader_task_state_topic: "/leader/task_state"
     heartbeat_topic: "/leader/heartbeat"
     leader_cmd_vel_topic: "/leader/cmd_vel"
     leader_odom_topic: "/leader/odom_aligned"
